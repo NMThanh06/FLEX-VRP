@@ -1,59 +1,369 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <h1 align="center">🚛 FLEX-VRP</h1>
+  <p align="center">
+    <strong>SmartLog B2B — Tối ưu Định tuyến & Xếp hàng 3D cho Vận tải B2B</strong>
+  </p>
+  <p align="center">
+    <a href="#-cài-đặt-nhanh-với-docker">Cài đặt</a> •
+    <a href="#-kiến-trúc-hệ-thống">Kiến trúc</a> •
+    <a href="#-tech-stack">Tech Stack</a> •
+    <a href="#-lệnh-thường-dùng">Lệnh thường dùng</a> •
+    <a href="#-tài-liệu-kỹ-thuật">Tài liệu</a>
+  </p>
 </p>
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 📋 Giới thiệu
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+**FLEX-VRP** là hệ thống Web App B2B giải quyết bài toán **Tối ưu Định tuyến Giao hàng Đa kỳ (Multi-Period VRP)** kết hợp **Tính toán Sơ đồ Bốc xếp 3D** cho chuỗi cung ứng vận tải:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- 🏭 **Kho nhà máy (Carrier):** Quản lý đội xe, danh mục hàng hóa → Kích hoạt thuật toán → Xem lịch trình tối ưu + sơ đồ xếp hàng 3D trên Dashboard.
+- 🛒 **Tạp hóa / Shop (Retailer):** Duyệt danh mục kho → Đặt hàng → Chọn khung giờ nhận hàng mong muốn.
 
-## Learning Laravel
+### Hai Động cơ Thuật toán Cốt lõi
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+| Thuật toán | Mô tả |
+|---|---|
+| **VRP Solver** (FMPMD-CVRP-TW) | Tự động gom/chia đơn, tính lộ trình đa kỳ né kẹt xe, kết hợp dữ liệu giao thông & thời tiết thực tế |
+| **3D Bin Packing** | Tính toán tọa độ xếp hàng (LIFO theo thứ tự giao + hàng nặng dưới / dễ vỡ trên) → Render 3D trên Dashboard |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-## Laravel Sponsors
+## 🛠 Tech Stack
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+| Layer | Công nghệ | Version |
+|---|---|---|
+| **Backend** | Laravel (PHP) | 12.x (PHP 8.2) |
+| **Database** | MySQL | 8.0 |
+| **Cache & Queue** | Redis | 7.4 |
+| **Realtime** | Laravel Reverb | WebSocket |
+| **Frontend** | React + Vite | 18+ / 7.x |
+| **Map** | Mapbox GL / Leaflet | — |
+| **3D Viewer** | Three.js | — |
+| **Optimization Engine** | Python (FastAPI + Celery) | 3.11+ |
+| **Automation** | n8n | Self-hosted |
+| **AI Agent** | OpenRouter API | Claude / GPT-4o |
+| **Container** | Docker + Docker Compose | 29.x / 5.x |
 
-### Premium Partners
+---
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## 🚀 Cài đặt nhanh với Docker
 
-## Contributing
+### Yêu cầu
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Chỉ cần cài **2 thứ** trên máy:
 
-## Code of Conduct
+| Phần mềm | Download |
+|---|---|
+| **Git** | [git-scm.com](https://git-scm.com/downloads) |
+| **Docker Desktop** | [docker.com](https://www.docker.com/products/docker-desktop/) |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+> ⚠️ **Windows:** Sau khi cài Docker Desktop, mở app và đảm bảo Docker Engine đang chạy (icon 🐳 trên taskbar).
 
-## Security Vulnerabilities
+### Bước 1 — Clone dự án
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+git clone https://github.com/NMThanh06/FLEX-VRP.git
+cd FLEX-VRP
+```
 
-## License
+### Bước 2 — Khởi chạy Docker
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+docker compose up -d
+```
+
+> ⏳ Lần đầu chạy sẽ mất **3–5 phút** để tải image và build. Các lần sau chỉ mất vài giây.
+
+Docker sẽ tự động thực hiện:
+- ✅ Dựng container: PHP 8.2, Nginx, MySQL 8.0, Redis 7.4
+- ✅ Cài `composer install` & `npm install`
+- ✅ Copy `.env.example` → `.env` và generate `APP_KEY`
+- ✅ Chạy `php artisan migrate` tạo bảng database
+- ✅ Khởi động Vite dev server (Hot Reload)
+
+### Bước 3 — Mở trình duyệt
+
+| Service | URL | Mô tả |
+|---|---|---|
+| 🌐 **App** | [http://localhost:8000](http://localhost:8000) | Trang web chính |
+| 🗄️ **phpMyAdmin** | [http://localhost:8080](http://localhost:8080) | Quản lý database (GUI) |
+| ⚡ **Vite** | [http://localhost:5173](http://localhost:5173) | Frontend dev server |
+
+**Xong! 🎉** Dự án đã chạy.
+
+---
+
+## 💻 Lệnh thường dùng
+
+### Quản lý Docker
+
+```bash
+# Khởi chạy tất cả services
+docker compose up -d
+
+# Tắt tất cả services
+docker compose down
+
+# Xem logs (tất cả hoặc từng service)
+docker compose logs -f
+docker compose logs -f app
+
+# Restart 1 service
+docker compose restart app
+
+# Reset toàn bộ (xóa database, làm lại từ đầu)
+docker compose down -v
+docker compose up -d
+```
+
+### Laravel Artisan
+
+Tất cả lệnh `php artisan` chạy qua Docker:
+
+```bash
+# Chạy migration
+docker compose exec app php artisan migrate
+
+# Chạy migration + seed data mẫu
+docker compose exec app php artisan migrate:fresh --seed
+
+# Tạo migration mới
+docker compose exec app php artisan make:migration create_example_table
+
+# Tạo Model
+docker compose exec app php artisan make:model Example -mfs
+
+# Tạo Controller
+docker compose exec app php artisan make:controller ExampleController --api
+
+# Xóa cache
+docker compose exec app php artisan optimize:clear
+
+# Chạy queue worker
+docker compose exec app php artisan queue:work
+
+# Mở Tinker (Laravel REPL)
+docker compose exec app php artisan tinker
+
+# Chạy tests
+docker compose exec app php artisan test
+```
+
+### Composer & NPM
+
+```bash
+# Cài thêm package PHP
+docker compose exec app composer require package/name
+
+# Cài thêm package NPM
+docker compose exec app npm install package-name
+
+# Build frontend cho production
+docker compose exec app npm run build
+```
+
+### Database
+
+```bash
+# Truy cập MySQL CLI
+docker compose exec mysql mysql -u flexvrp -pflexvrp_secret flexvrp
+
+# Backup database
+docker compose exec mysql mysqldump -u flexvrp -pflexvrp_secret flexvrp > backup.sql
+
+# Restore database
+docker compose exec -T mysql mysql -u flexvrp -pflexvrp_secret flexvrp < backup.sql
+```
+
+---
+
+## 📁 Cấu trúc dự án
+
+```
+FLEX-VRP/
+├── app/                    # Laravel Application (Models, Controllers, Services)
+│   ├── Http/Controllers/   # API Controllers
+│   ├── Models/             # Eloquent Models
+│   ├── Services/           # Business Logic Services
+│   └── Jobs/               # Queue Jobs
+├── config/                 # Laravel Configuration
+├── database/
+│   ├── migrations/         # Database Migrations
+│   ├── seeders/            # Data Seeders
+│   └── factories/          # Model Factories
+├── docker/                 # 🐳 Docker Configuration
+│   ├── php/
+│   │   ├── Dockerfile      # PHP 8.2-FPM image
+│   │   └── php.ini         # PHP settings
+│   ├── nginx/
+│   │   └── default.conf    # Nginx config
+│   ├── mysql/
+│   │   ├── Dockerfile      # MySQL 8.0 image
+│   │   └── my.cnf          # MySQL settings
+│   ├── supervisor/
+│   │   └── supervisord.conf # Queue worker config
+│   └── entrypoint.sh       # Auto-setup script
+├── public/                 # Public assets
+├── resources/              # Views, CSS, JS
+├── routes/                 # API & Web routes
+├── storage/                # Logs, cache, uploads
+├── tests/                  # PHPUnit Tests
+├── architecture.md         # 📐 Tài liệu kiến trúc hệ thống
+├── todo.md                 # ✅ Sprint checklist
+├── docker-compose.yml      # 🐳 Docker Compose config
+├── .env.example            # Template biến môi trường
+├── composer.json           # PHP dependencies
+└── package.json            # Node.js dependencies
+```
+
+---
+
+## 🏗 Kiến trúc Hệ thống
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Docker Compose Stack                         │
+│                                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │  Nginx   │  │ Laravel  │  │  Vite    │  │phpMyAdmin│       │
+│  │  :8000   │  │ PHP-FPM  │  │  :5173   │  │  :8080   │       │
+│  └────┬─────┘  └────┬─────┘  └──────────┘  └────┬─────┘       │
+│       │              │                            │             │
+│  ┌────┴──────────────┴────────────────────────────┴─────┐      │
+│  │                  Internal Network                     │      │
+│  └────┬──────────────┬──────────────────────────────────┘      │
+│       │              │                                          │
+│  ┌────┴─────┐  ┌─────┴────┐                                    │
+│  │  MySQL   │  │  Redis   │                                    │
+│  │  :3306   │  │  :6379   │                                    │
+│  └──────────┘  └──────────┘                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+> 📐 Xem chi tiết kiến trúc đầy đủ tại [architecture.md](./architecture.md)
+
+---
+
+## 🔐 Thông tin kết nối (Development)
+
+| Service | Host | Port | Username | Password |
+|---|---|---|---|---|
+| **MySQL** | `localhost` | `3306` | `flexvrp` | `flexvrp_secret` |
+| **MySQL Root** | `localhost` | `3306` | `root` | `root_secret` |
+| **Redis** | `localhost` | `6379` | — | — |
+| **phpMyAdmin** | `localhost` | `8080` | `flexvrp` | `flexvrp_secret` |
+
+> ⚠️ Đây là credentials cho môi trường **development** local. **KHÔNG** sử dụng cho production.
+
+---
+
+## 📝 Quy trình phát triển (Developer Workflow)
+
+### Khi bạn muốn code tính năng mới
+
+```bash
+# 1. Tạo branch mới
+git checkout -b feature/ten-tinh-nang
+
+# 2. Đảm bảo Docker đang chạy
+docker compose up -d
+
+# 3. Code bình thường trên VS Code
+#    (sửa file → save → tự động cập nhật trong container)
+
+# 4. Nếu cần tạo migration
+docker compose exec app php artisan make:migration create_xxx_table
+
+# 5. Chạy migration
+docker compose exec app php artisan migrate
+
+# 6. Chạy tests
+docker compose exec app php artisan test
+
+# 7. Commit & Push
+git add .
+git commit -m "feat: mô tả tính năng"
+git push origin feature/ten-tinh-nang
+```
+
+### Khi pull code mới từ Git
+
+```bash
+git pull origin main
+
+# Cài lại dependencies nếu composer.json thay đổi
+docker compose exec app composer install
+
+# Chạy migration nếu có migration mới
+docker compose exec app php artisan migrate
+```
+
+---
+
+## 🐛 Xử lý lỗi thường gặp
+
+<details>
+<summary><strong>❌ Port 8000 đã được sử dụng</strong></summary>
+
+Đổi port trong `docker-compose.yml`:
+```yaml
+nginx:
+  ports:
+    - "8001:80"   # Đổi 8000 thành 8001
+```
+Sau đó: `docker compose up -d`
+</details>
+
+<details>
+<summary><strong>❌ MySQL không khởi động được</strong></summary>
+
+```bash
+# Xóa data cũ và tạo lại
+docker compose down -v
+docker compose up -d
+```
+</details>
+
+<details>
+<summary><strong>❌ Permission denied trên storage/</strong></summary>
+
+```bash
+docker compose exec app chmod -R 775 storage bootstrap/cache
+```
+</details>
+
+<details>
+<summary><strong>❌ Composer/NPM install bị lỗi</strong></summary>
+
+```bash
+# Xóa cache và cài lại
+docker compose exec app composer clear-cache
+docker compose exec app composer install
+
+docker compose exec app npm cache clean --force
+docker compose exec app npm install
+```
+</details>
+
+---
+
+## 📚 Tài liệu kỹ thuật
+
+| File | Mô tả |
+|---|---|
+| [architecture.md](./architecture.md) | Kiến trúc hệ thống, ERD, Database Schema, Data Flow, Security |
+| [todo.md](./todo.md) | Sprint checklist — Tiến độ phát triển theo từng Phase |
+
+---
+
+## 📄 License
+
+Dự án được phân phối dưới giấy phép [Apache License 2.0](./LICENSE).
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ by <strong>FLEX-VRP Team</strong></sub>
+</p>

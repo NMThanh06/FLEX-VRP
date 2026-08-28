@@ -1,0 +1,51 @@
+# ============================================
+# FLEX-VRP — Docker Ignore
+# ============================================
+
+# Dependencies (cài lại trong container)
+/vendor
+/node_modules
+
+# Environment
+.env
+.env.backup
+.env.production
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+.fleet
+.nova
+.zed
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+storage/logs/*
+!storage/logs/.gitkeep
+
+# Cache
+bootstrap/cache/*
+!bootstrap/cache/.gitkeep
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+
+# Testing
+.phpunit.cache
+.phpunit.result.cache
+
+# Docker volumes
+docker/mysql/data
+
+# Documentation
+*.md
+LICENSE
