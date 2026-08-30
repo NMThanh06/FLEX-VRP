@@ -54,6 +54,9 @@ RUN groupadd -g ${GROUP_ID} flexvrp \
 # PHP configuration
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
 
+# Fix PHP-FPM listen address
+RUN echo "[www]\nlisten = 0.0.0.0:9000" > /usr/local/etc/php-fpm.d/zz-custom.conf
+
 # Switch to non-root user
 USER flexvrp
 

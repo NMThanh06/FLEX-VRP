@@ -1,11 +1,49 @@
+/* ─── Google Fonts: Be Vietnam Pro (hỗ trợ tiếng Việt) ── */
+/* IMPORTANT: @import phải đứng đầu tiên trước @import 'tailwindcss' */
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&display=swap');
+
 @import 'tailwindcss';
 
+/* ─── Tailwind Sources ────────────────────────────────── */
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
 @source '../**/*.js';
+@source '../**/*.jsx';
 
+/* ─── Design Tokens ───────────────────────────────────── */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    /* Typography */
+    --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+
+    /* Brand Colors — Blue monochromatic palette */
+    --color-brand-50:  #EFF6FF;
+    --color-brand-100: #DBEAFE;
+    --color-brand-200: #BFDBFE;
+    --color-brand-300: #93C5FD;
+    --color-brand-400: #60A5FA;
+    --color-brand-500: #3B82F6;
+    --color-brand-600: #2563EB;
+    --color-brand-700: #1D4ED8;
+    --color-brand-800: #1E40AF;
+    --color-brand-900: #1E3A8A;
+    --color-brand-950: #172554;
+
+    /* Neutral */
+    --color-surface:   #FFFFFF;
+    --color-border:    #E5E7EB;
+    --color-muted:     #F9FAFB;
+    --color-text-base: #111827;
+    --color-text-muted:#6B7280;
+}
+
+/* ─── Base Styles ─────────────────────────────────────── */
+@layer base {
+    html {
+        font-family: var(--font-sans);
+        color: var(--color-text-base);
+        background-color: var(--color-surface);
+        -webkit-font-smoothing: antialiased;
+        scroll-behavior: smooth;
+    }
 }
