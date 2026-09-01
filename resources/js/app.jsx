@@ -9,25 +9,52 @@ import CreateOrderPage from './pages/CreateOrderPage';
 import MyOrdersPage from './pages/MyOrdersPage';
 import RoutingOptimizationPage from './pages/RoutingOptimizationPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import '../css/app.css';
 
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
 function App() {
     return (
-        <BrowserRouter>
-            <RouterRoutes>
-                <RouterRoute element={<MainLayout />}>
-                    <RouterRoute path="/" element={<HomePage />} />
-                    <RouterRoute path="/order" element={<CreateOrderPage />} />
-                    <RouterRoute path="/my-orders" element={<MyOrdersPage />} />
-                    <RouterRoute path="/routing" element={<RoutingOptimizationPage />} />
-                    <RouterRoute path="/admin-dashboard" element={<AdminDashboardPage />} />
-                </RouterRoute>
-                <RouterRoute path="/login" element={<LoginPage />} />
-                <RouterRoute path="/register" element={<RegisterPage />} />
-            </RouterRoutes>
-        </BrowserRouter>
+        <AuthProvider>
+            <BrowserRouter>
+                <RouterRoutes>
+                    <RouterRoute element={<MainLayout />}>
+                        <RouterRoute path="/" element={<HomePage />} />
+                        <RouterRoute path="/order" element={
+                            <ProtectedRoute>
+                                <CreateOrderPage />
+                            </ProtectedRoute>
+                        } />
+                        <RouterRoute path="/my-orders" element={
+                            <ProtectedRoute>
+                                <MyOrdersPage />
+                            </ProtectedRoute>
+                        } />
+                        <RouterRoute path="/routing" element={
+                            <ProtectedRoute allowedRoles={['admin']}>
+                                <RoutingOptimizationPage />
+                            </ProtectedRoute>
+                        } />
+                        <RouterRoute path="/admin-dashboard" element={
+                            <ProtectedRoute allowedRoles={['admin']}>
+                                <AdminDashboardPage />
+                            </ProtectedRoute>
+                        } />
+                        <RouterRoute path="/profile" element={
+                            <ProtectedRoute>
+                                <ProfilePage />
+                            </ProtectedRoute>
+                        } />
+                    </RouterRoute>
+                    <RouterRoute path="/login" element={<LoginPage />} />
+                    <RouterRoute path="/register" element={<RegisterPage />} />
+                </RouterRoutes>
+            </BrowserRouter>
+        </AuthProvider>
     );
 }
 

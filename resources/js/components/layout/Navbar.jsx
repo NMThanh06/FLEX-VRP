@@ -1,18 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Truck } from 'lucide-react';
-
-const navLinks = [
-    { label: 'Trang chủ', href: '/' },
-    { label: 'Đơn của tôi', href: '/my-orders' },
-    { label: 'Đặt hàng', href: '/order' },
-    { label: 'Tối ưu xe', href: '/routing' },
-    { label: 'Admin', href: '/admin-dashboard' },
-];
+import { Menu, X, Truck, ChevronDown, User, LogOut } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Navbar() {
+    const { user, logout } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    // Xử lý click ra ngoài dropdown
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Lọc menu theo role
+    const getNavLinks = () => {
+        const links = [{ label: 'Trang chủ', href: '/' }];
+        
+        if (user) {
+            links.push({ label: 'Đơn của tôi', href: '/my-orders' });
+            links.push({ label: 'Đặt hàng', href: '/order' });
+            
+            if (user.role === 'admin') {
+                links.push({ label: 'Tối ưu xe', href: '/routing' });
+                links.push({ label: 'Admin', href: '/admin-dashboard' });
+            }
+        }
+        return links;
+    };
+
+    const activeLinks = getNavLinks();
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 16);
@@ -43,31 +68,71 @@ export default function Navbar() {
 
                     {/* Desktop Nav */}
                     <nav className="hidden md:flex items-center gap-8">
-                        {navLinks.map((link) => (
-                            <a
+                        {activeLinks.map((link) => (
+                            <Link
                                 key={link.label}
-                                href={link.href}
+                                to={link.href}
                                 className="text-sm font-500 text-gray-600 hover:text-blue-700 transition-colors duration-150"
                             >
                                 {link.label}
-                            </a>
+                            </Link>
                         ))}
                     </nav>
 
                     {/* Desktop Actions */}
                     <div className="hidden md:flex items-center gap-3">
-                        <Link
-                            to="/login"
-                            className="text-sm font-500 text-gray-700 hover:text-blue-700 transition-colors duration-150 px-4 py-2"
-                        >
-                            Đăng nhập
-                        </Link>
-                        <Link
-                            to="/register"
-                            className="text-sm font-500 text-white bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-md transition-colors duration-150"
-                        >
-                            Dùng thử miễn phí
-                        </Link>
+                        {user ? (
+                            <div className="relative" ref={dropdownRef}>
+                                <button
+                                    onClick={() => setIsProfileOpen(!isProfileOpen)}
+                                    className="flex items-center gap-2 text-sm font-500 text-gray-700 hover:text-blue-700 transition-colors duration-150 py-2"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+                                        {user.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span>{user.name}</span>
+                                    <ChevronDown size={16} className={`transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {isProfileOpen && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 border border-gray-100 z-50">
+                                        <Link
+                                            to="/profile"
+                                            onClick={() => setIsProfileOpen(false)}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-700 transition-colors"
+                                        >
+                                            <User size={16} />
+                                            Trang cá nhân
+                                        </Link>
+                                        <button
+                                            onClick={() => {
+                                                setIsProfileOpen(false);
+                                                logout();
+                                            }}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left transition-colors"
+                                        >
+                                            <LogOut size={16} />
+                                            Đăng xuất
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <Link
+                                    to="/login"
+                                    className="text-sm font-500 text-gray-700 hover:text-blue-700 transition-colors duration-150 px-4 py-2"
+                                >
+                                    Đăng nhập
+                                </Link>
+                                <Link
+                                    to="/register"
+                                    className="text-sm font-500 text-white bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-md transition-colors duration-150"
+                                >
+                                    Dùng thử miễn phí
+                                </Link>
+                            </>
+                        )}
                     </div>
 
                     {/* Mobile toggle */}
@@ -85,31 +150,56 @@ export default function Navbar() {
             {isOpen && (
                 <div className="md:hidden border-t border-gray-200 bg-white">
                     <div className="max-w-7xl mx-auto px-6 py-4 space-y-1">
-                        {navLinks.map((link) => (
-                            <a
+                        {activeLinks.map((link) => (
+                            <Link
                                 key={link.label}
-                                href={link.href}
+                                to={link.href}
                                 onClick={() => setIsOpen(false)}
                                 className="block py-2.5 text-sm font-500 text-gray-700 hover:text-blue-700 transition-colors"
                             >
                                 {link.label}
-                            </a>
+                            </Link>
                         ))}
                         <div className="pt-3 mt-3 border-t border-gray-100 flex flex-col gap-2">
-                            <Link
-                                to="/login"
-                                onClick={() => setIsOpen(false)}
-                                className="text-sm font-500 text-gray-700 py-2.5"
-                            >
-                                Đăng nhập
-                            </Link>
-                            <Link
-                                to="/register"
-                                onClick={() => setIsOpen(false)}
-                                className="text-sm font-500 text-white bg-blue-700 hover:bg-blue-800 px-4 py-2.5 rounded-md text-center transition-colors"
-                            >
-                                Dùng thử miễn phí
-                            </Link>
+                            {user ? (
+                                <>
+                                    <Link
+                                        to="/profile"
+                                        onClick={() => setIsOpen(false)}
+                                        className="flex items-center gap-2 text-sm font-500 text-gray-700 py-2.5"
+                                    >
+                                        <User size={18} />
+                                        Trang cá nhân
+                                    </Link>
+                                    <button
+                                        onClick={() => {
+                                            setIsOpen(false);
+                                            logout();
+                                        }}
+                                        className="flex items-center gap-2 text-sm font-500 text-red-600 py-2.5 text-left"
+                                    >
+                                        <LogOut size={18} />
+                                        Đăng xuất
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <Link
+                                        to="/login"
+                                        onClick={() => setIsOpen(false)}
+                                        className="text-sm font-500 text-gray-700 py-2.5"
+                                    >
+                                        Đăng nhập
+                                    </Link>
+                                    <Link
+                                        to="/register"
+                                        onClick={() => setIsOpen(false)}
+                                        className="text-sm font-500 text-white bg-blue-700 hover:bg-blue-800 px-4 py-2.5 rounded-md text-center transition-colors"
+                                    >
+                                        Dùng thử miễn phí
+                                    </Link>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
