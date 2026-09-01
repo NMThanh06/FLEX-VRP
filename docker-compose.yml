@@ -19,8 +19,6 @@ services:
     command: php-fpm
     volumes:
       - .:/var/www/html
-      - /var/www/html/vendor
-      - /var/www/html/node_modules
     networks:
       - flexvrp-network
     depends_on:
@@ -113,7 +111,6 @@ services:
       - "5173:5173"
     volumes:
       - .:/var/www/html
-      - /var/www/html/node_modules
     networks:
       - flexvrp-network
     depends_on:

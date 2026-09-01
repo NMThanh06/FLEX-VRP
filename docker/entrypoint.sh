@@ -15,7 +15,7 @@ if [ ! -f .env ]; then
 fi
 
 # 2. Cài đặt Composer dependencies
-if [ ! -d vendor ]; then
+if [ ! -f vendor/autoload.php ]; then
     echo "📦 Cài đặt Composer dependencies..."
     composer install --no-interaction --optimize-autoloader
 fi
@@ -27,7 +27,7 @@ if grep -q "APP_KEY=$" .env 2>/dev/null || grep -q "APP_KEY=base64:$" .env 2>/de
 fi
 
 # 4. Cài đặt NPM dependencies
-if [ ! -d node_modules ]; then
+if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ] && [ ! -d node_modules/react ]; then
     echo "📦 Cài đặt NPM dependencies..."
     npm install
 fi
