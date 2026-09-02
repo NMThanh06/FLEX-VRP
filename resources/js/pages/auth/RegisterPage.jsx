@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Truck, ArrowRight, CheckCircle } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { Truck, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
+    const { register } = useAuth();
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
     const [formData, setFormData] = useState({
         companyName: '',
         fullName: '',
@@ -15,14 +21,23 @@ export default function RegisterPage() {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // TODO: Xử lý logic đăng ký sau
         if (formData.password !== formData.confirmPassword) {
-            alert("Mật khẩu không khớp!");
+            setError("Mật khẩu không khớp!");
             return;
         }
-        console.log('Register attempt:', formData);
+
+        setLoading(true);
+        setError('');
+        try {
+            await register(formData.fullName, formData.email, formData.password);
+            navigate('/');
+        } catch (err) {
+            setError(err.response?.data?.message || 'Đăng ký thất bại. Vui lòng kiểm tra lại thông tin.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -46,6 +61,12 @@ export default function RegisterPage() {
                         <h1 className="text-3xl font-700 text-gray-900 mb-2">Tạo tài khoản</h1>
                         <p className="text-gray-500">Bắt đầu dùng thử miễn phí và trải nghiệm sức mạnh của FLEX-VRP.</p>
                     </div>
+
+                    {error && (
+                        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+                            {error}
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
@@ -132,10 +153,20 @@ export default function RegisterPage() {
                         <div className="pt-2">
                             <button
                                 type="submit"
-                                className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-500 py-3 px-4 rounded-md transition-colors"
+                                disabled={loading}
+                                className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-500 py-3 px-4 rounded-md transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                Đăng ký ngay
-                                <ArrowRight size={18} />
+                                {loading ? (
+                                    <>
+                                        <Loader2 size={18} className="animate-spin" />
+                                        Đang xử lý...
+                                    </>
+                                ) : (
+                                    <>
+                                        Đăng ký ngay
+                                        <ArrowRight size={18} />
+                                    </>
+                                )}
                             </button>
                         </div>
                         
