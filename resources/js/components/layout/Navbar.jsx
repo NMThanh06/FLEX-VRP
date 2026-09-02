@@ -30,8 +30,8 @@ export default function Navbar() {
             links.push({ label: 'Đặt hàng', href: '/order' });
             
             if (user.role === 'admin') {
-                links.push({ label: 'Tối ưu xe', href: '/routing' });
-                links.push({ label: 'Admin', href: '/admin-dashboard' });
+                links.push({ label: 'Tối ưu lộ trình', href: '/routing' });
+                links.push({ label: 'Dashboard', href: '/admin-dashboard' });
             }
         }
         return links;
@@ -72,7 +72,7 @@ export default function Navbar() {
                             <Link
                                 key={link.label}
                                 to={link.href}
-                                className="text-sm font-500 text-gray-600 hover:text-blue-700 transition-colors duration-150"
+                                className="text-sm font-500 text-gray-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-2 rounded-md transition-all duration-200"
                             >
                                 {link.label}
                             </Link>
@@ -127,7 +127,7 @@ export default function Navbar() {
                                 </Link>
                                 <Link
                                     to="/register"
-                                    className="text-sm font-500 text-white bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-md transition-colors duration-150"
+                                    className="text-sm font-500 text-white bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-md transition-all duration-200 hover:-translate-y-0.5 shadow-sm hover:shadow-md"
                                 >
                                     Dùng thử miễn phí
                                 </Link>
