@@ -4,10 +4,10 @@ import { Truck, Mail, Phone, MapPin, ExternalLink } from 'lucide-react';
 
 const footerLinks = {
     'Sản phẩm': [
-        { label: 'Tối ưu tuyến đường', href: '#' },
+        { label: 'Tối ưu lộ trình', href: '/routing' },
         { label: 'Xếp hàng 3D', href: '#' },
         { label: 'Quản lý đội xe', href: '#' },
-        { label: 'Dashboard realtime', href: '#' },
+        { label: 'Dashboard', href: '/admin-dashboard' },
     ],
     'Doanh nghiệp': [
         { label: 'Về chúng tôi', href: '#about' },
