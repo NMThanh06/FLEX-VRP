@@ -28,10 +28,16 @@ export default function Navbar() {
         if (user) {
             links.push({ label: 'Đơn của tôi', href: '/my-orders' });
             links.push({ label: 'Đặt hàng', href: '/order' });
+            if (user.role === 'admin' || user.role === 'carrier') {
+                links.push({ label: 'Dashboard', href: '/admin-dashboard' });
+            }
             
             if (user.role === 'admin') {
                 links.push({ label: 'Tối ưu lộ trình', href: '/routing' });
-                links.push({ label: 'Dashboard', href: '/admin-dashboard' });
+            }
+
+            if (user.role === 'carrier') {
+                links.push({ label: 'Quản lý Kho', href: '/warehouses-management' });
             }
         }
         return links;

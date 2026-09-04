@@ -13,6 +13,14 @@ const StatusBadge = ({ status }) => {
     }
 };
 
+const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    // Fix Safari/iOS issue with date strings containing spaces
+    const safeString = dateString.replace(' ', 'T');
+    const date = new Date(safeString);
+    return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString('vi-VN');
+};
+
 export default function MyOrdersPage() {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -102,8 +110,8 @@ export default function MyOrdersPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                             <div className="text-xs">
-                                                {new Date(order.time_window_start).toLocaleString('vi-VN')} <br/>
-                                                -> {new Date(order.time_window_end).toLocaleString('vi-VN')}
+                                                {formatDate(order.time_window_start)} <br/>
+                                                {`-> ${formatDate(order.time_window_end)}`}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">

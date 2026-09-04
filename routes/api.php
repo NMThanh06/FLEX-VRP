@@ -20,5 +20,15 @@ Route::post('/orders', [OrderController::class, 'store']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/profile', [AuthController::class, 'updateProfile']);
-});
 
+    // Carrier Management Routes
+    Route::get('/management/warehouses', [\App\Http\Controllers\Api\ManagementController::class, 'getWarehouses']);
+    Route::post('/management/warehouses', [\App\Http\Controllers\Api\ManagementController::class, 'storeWarehouse']);
+    Route::put('/management/warehouses/{id}', [\App\Http\Controllers\Api\ManagementController::class, 'updateWarehouse']);
+    Route::delete('/management/warehouses/{id}', [\App\Http\Controllers\Api\ManagementController::class, 'destroyWarehouse']);
+
+    Route::get('/management/products', [\App\Http\Controllers\Api\ManagementController::class, 'getProducts']);
+    Route::post('/management/products', [\App\Http\Controllers\Api\ManagementController::class, 'storeProduct']);
+    Route::put('/management/products/{id}', [\App\Http\Controllers\Api\ManagementController::class, 'updateProduct']);
+    Route::delete('/management/products/{id}', [\App\Http\Controllers\Api\ManagementController::class, 'destroyProduct']);
+});

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Users, Truck, Package, DollarSign, Activity, TrendingUp, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
+import { Users, Truck, Package, DollarSign, Activity, TrendingUp, Calendar, AlertCircle, CheckCircle, Home } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const StatCard = ({ title, value, change, icon: Icon, colorClass }) => (
     <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -22,6 +23,8 @@ const StatCard = ({ title, value, change, icon: Icon, colorClass }) => (
 );
 
 export default function AdminDashboardPage() {
+    const { user } = useAuth();
+    
     return (
         <div className="bg-gray-50 min-h-[calc(100vh-64px)] py-8 px-4 sm:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">
@@ -30,16 +33,22 @@ export default function AdminDashboardPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                     <div>
                         <h1 className="text-2xl font-700 text-gray-900">Dashboard Tổng quan</h1>
-                        <p className="text-sm text-gray-500 mt-1">Xin chào Admin! Dưới đây là hiệu suất hệ thống FLEX-VRP ngày hôm nay.</p>
+                        <p className="text-sm text-gray-500 mt-1">Xin chào {user?.name || (user?.role === 'admin' ? 'Admin' : 'Carrier')}! Dưới đây là hiệu suất hệ thống FLEX-VRP ngày hôm nay.</p>
                     </div>
                     <div className="flex items-center gap-3">
                         <div className="bg-white border border-gray-200 px-4 py-2 rounded-md text-sm font-500 text-gray-700 flex items-center gap-2">
                             <Calendar size={16} className="text-gray-400" />
                             30 Tháng 08, 2026
                         </div>
-                        <Link to="/routing" className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-md text-sm font-500 transition-colors">
-                            Chạy Tối ưu Lộ trình
-                        </Link>
+                        {user?.role === 'carrier' ? (
+                            <Link to="/warehouses-management" className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-md text-sm font-500 transition-colors flex items-center gap-2">
+                                <Home size={16} /> Quản lý Kho & SP
+                            </Link>
+                        ) : (
+                            <Link to="/routing" className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-md text-sm font-500 transition-colors">
+                                Chạy Tối ưu Lộ trình
+                            </Link>
+                        )}
                     </div>
                 </div>
 
