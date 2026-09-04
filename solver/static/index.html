@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FLEX-VRP — Tối ưu Tuyến đường & Dashboard Giao thông</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface-2: #232733;
+            --surface-3: #2d3242;
+            --border: #2e3345;
+            --border-focus: #4b526d;
+            --text: #e4e6f0;
+            --text-dim: #8b8fa3;
+            --accent: #6c63ff;
+            --accent-light: #8b5cf6;
+            --accent-glow: rgba(108, 99, 255, 0.25);
+            --green: #34d399;
+            --green-glow: rgba(52, 211, 153, 0.2);
+            --yellow: #fbbf24;
+            --yellow-glow: rgba(251, 191, 36, 0.2);
+            --red: #f87171;
+            --red-glow: rgba(248, 113, 113, 0.2);
+            --blue: #60a5fa;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Header & Navigation ── */
+        .header {
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-brand { display: flex; align-items: center; gap: 10px; }
+        .header h1 {
+            font-size: 1.3rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), #a78bfa);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .header .badge {
+            font-size: 0.65rem; background: var(--accent-glow); color: var(--accent);
+            padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(108,99,255,0.3); font-weight: 600;
+        }
+        .nav-tabs {
+            display: flex; background: var(--surface-2); padding: 4px; border-radius: 10px;
+            border: 1px solid var(--border); gap: 4px;
+        }
+        .nav-tab {
+            background: transparent; border: none; color: var(--text-dim); padding: 8px 16px;
+            border-radius: 8px; font-size: 0.82rem; font-weight: 600; font-family: inherit;
+            cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+        }
+        .nav-tab:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+        .nav-tab.active { color: #fff; background: var(--accent); box-shadow: 0 2px 10px var(--accent-glow); }
+
+        /* ── Views ── */
+        .tab-view { display: none; }
+        .tab-view.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* ── Optimizer Layout ── */
+        .optimizer-layout { display: grid; grid-template-columns: 420px 1fr; min-height: calc(100vh - 61px); }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            background: var(--surface); border-right: 1px solid var(--border); padding: 20px;
+            display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: calc(100vh - 61px);
+        }
+        .section-title {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+            color: var(--text-dim); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+
+        /* ── Pill Toggle ── */
+        .pill-toggle {
+            display: flex; background: var(--bg); border-radius: 10px; padding: 3px; gap: 3px;
+            border: 1px solid var(--border); margin-bottom: 12px;
+        }
+        .pill-btn {
+            flex: 1; padding: 8px 10px; border: none; border-radius: 8px; font-size: 0.8rem;
+            font-weight: 600; font-family: inherit; cursor: pointer; background: transparent;
+            color: var(--text-dim); transition: all 0.2s; text-align: center;
+        }
+        .pill-btn.active { background: var(--accent); color: #fff; box-shadow: 0 2px 10px var(--accent-glow); }
+
+        /* ── Search Wrapper & Detailed Autocomplete ── */
+        .search-wrapper { position: relative; margin-bottom: 12px; }
+        .search-wrapper input {
+            width: 100%; padding: 10px 14px 10px 36px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 0.85rem; font-family: inherit; outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-wrapper input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .search-wrapper .search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            font-size: 0.85rem; pointer-events: none; opacity: 0.5;
+        }
+        .autocomplete-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+            background: var(--surface-2); border: 1px solid var(--border-focus); border-radius: 10px;
+            margin-top: 6px; max-height: 320px; overflow-y: auto; display: none;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+        }
+        .autocomplete-dropdown.visible { display: block; }
+        .autocomplete-item {
+            padding: 10px 14px; cursor: pointer; font-size: 0.82rem; border-bottom: 1px solid var(--border);
+            transition: all 0.2s; display: flex; flex-direction: column; gap: 4px;
+        }
+        .autocomplete-item:last-child { border-bottom: none; }
+        .autocomplete-item:hover, .autocomplete-item.highlighted {
+            background: rgba(108,99,255,0.22); border-left: 3px solid var(--accent);
+        }
+        .ac-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .ac-title { font-weight: 700; color: #fff; font-size: 0.86rem; }
+        .ac-coords { font-size: 0.68rem; color: var(--accent-light); font-weight: 600; font-family: monospace; background: rgba(108,99,255,0.15); padding: 2px 6px; border-radius: 4px; }
+        .ac-full-address { font-size: 0.74rem; color: var(--text-dim); line-height: 1.35; word-break: break-word; }
+
+        /* ── Map Mode Selection Control ── */
+        .map-pick-btn {
+            width: 100%; padding: 8px 12px; background: var(--bg); border: 1px dashed var(--accent);
+            border-radius: 8px; color: var(--text); font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+        .map-pick-btn:hover { background: rgba(108,99,255,0.1); border-style: solid; }
+        .map-pick-btn.active { background: var(--accent); color: white; border-style: solid; box-shadow: 0 2px 10px var(--accent-glow); }
+
+        /* ── Depots & Delivery Lists ── */
+        .item-list { display: flex; flex-direction: column; gap: 6px; max-height: 170px; overflow-y: auto; padding-right: 4px; }
+        .item-list::-webkit-scrollbar { width: 4px; }
+        .item-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        .loc-item {
+            display: flex; align-items: center; gap: 8px; background: var(--bg); padding: 8px 10px;
+            border-radius: 8px; border: 1px solid var(--border); font-size: 0.8rem; transition: all 0.2s;
+        }
+        .loc-item.selected-depot { border-color: var(--green); background: rgba(52,211,153,0.08); }
+        .loc-item .badge-num {
+            width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+        }
+        .badge-depot { background: var(--green); color: #0f1117; }
+        .badge-delivery { background: var(--accent); color: white; }
+        .loc-item .info { flex: 1; overflow: hidden; cursor: pointer; }
+        .loc-item .info .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+        .loc-item .info .coords { font-size: 0.68rem; color: var(--text-dim); }
+        .loc-item .actions { display: flex; align-items: center; gap: 4px; }
+        .icon-btn {
+            background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 2px 6px;
+            border-radius: 4px; transition: background 0.2s; color: var(--text-dim);
+        }
+        .icon-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+        .icon-btn.delete:hover { background: rgba(248,113,113,0.15); color: var(--red); }
+        .empty-state { text-align: center; padding: 12px; color: var(--text-dim); font-size: 0.76rem; line-height: 1.4; }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 9px 16px; border: none; border-radius: 8px; font-size: 0.82rem;
+            font-family: inherit; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-light)); color: white; box-shadow: 0 4px 15px var(--accent-glow); }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 25px var(--accent-glow); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { border-color: var(--accent); }
+        .btn-sm { padding: 6px 10px; font-size: 0.75rem; }
+        .btn-optimize {
+            width: 100%; padding: 13px; font-size: 0.92rem;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+
+        /* ── Weather Selector ── */
+        .weather-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .weather-opt {
+            background: var(--bg); border: 2px solid var(--border); border-radius: 8px;
+            padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 0.75rem;
+        }
+        .weather-opt:hover { border-color: var(--accent); }
+        .weather-opt.active { border-color: var(--accent); background: var(--accent-glow); }
+        .weather-opt .emoji { font-size: 1.2rem; display: block; margin-bottom: 2px; }
+        .weather-opt .label { color: var(--text-dim); }
+
+        /* ── Toggle Switch ── */
+        .toggle-group { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 0; }
+        .toggle-info { display: flex; flex-direction: column; gap: 2px; }
+        .toggle-title { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+        .toggle-subtitle { font-size: 0.7rem; color: var(--text-dim); line-height: 1.2; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background-color: var(--surface-2); border: 1px solid var(--border); transition: .25s ease; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: var(--text-dim); transition: .25s ease; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent); border-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(18px); background-color: #fff; }
+
+        /* ── Input Groups ── */
+        .input-group { margin-bottom: 10px; }
+        .input-group label { display: block; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 4px; font-weight: 500; }
+        .input-group input, .input-group select {
+            width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 0.82rem; font-family: inherit; outline: none; transition: border-color 0.2s;
+        }
+        .input-group input:focus, .input-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+        .vehicle-select-wrapper { display: flex; gap: 8px; align-items: center; }
+        .vehicle-select-wrapper select { flex: 1; }
+
+        /* ── Map ── */
+        .map-area { display: flex; flex-direction: column; position: relative; }
+        #map { flex: 1; min-height: 480px; z-index: 1; }
+
+        /* ── Route Alternatives Tabs & Highlights ── */
+        .route-tabs-container {
+            margin-bottom: 16px; background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px;
+        }
+        .route-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .route-tab-btn {
+            padding: 10px 8px; border: 2px solid var(--border); border-radius: 8px; font-size: 0.78rem;
+            font-weight: 600; font-family: inherit; cursor: pointer; background: var(--bg);
+            color: var(--text-dim); transition: all 0.2s; text-align: center; line-height: 1.35;
+        }
+        .route-tab-btn:hover { border-color: var(--accent-light); color: var(--text); }
+        .route-tab-btn.active {
+            background: rgba(108,99,255,0.15); border-color: var(--accent); color: #fff;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+        .route-tab-btn .tag-name { font-size: 0.85rem; font-weight: 700; margin-bottom: 2px; }
+        .route-tab-btn .tag-stats { font-size: 0.72rem; opacity: 0.85; }
+
+        /* ── Analysis Panel ── */
+        .analysis-panel { background: var(--surface); border-top: 1px solid var(--border); padding: 18px 24px; display: none; }
+        .analysis-panel.visible { display: block; animation: fadeUp 0.4s ease; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .stat-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+        .stat-card .stat-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+        .stat-card .stat-value { font-size: 1.35rem; font-weight: 700; }
+        .stat-card .stat-unit { font-size: 0.75rem; color: var(--text-dim); margin-left: 2px; }
+        .stat-card.highlight { border-color: var(--green); }
+        .stat-card.highlight .stat-value { color: var(--green); }
+
+        /* ── Trip Control ── */
+        .trip-control {
+            display: flex; gap: 8px; margin-top: 14px; padding: 12px 14px; background: var(--surface-2);
+            border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap; align-items: center;
+        }
+        .trip-control .trip-status { font-size: 0.82rem; flex: 1; min-width: 150px; }
+        .trip-manual-form {
+            display: none; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: var(--radius); margin-top: 8px; flex-wrap: wrap; align-items: end;
+        }
+        .trip-manual-form.visible { display: flex; }
+        .trip-manual-form .mini-input { width: 85px; }
+        .trip-manual-form label { font-size: 0.72rem; color: var(--text-dim); display: block; margin-bottom: 3px; }
+        .trip-manual-form input {
+            padding: 6px 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text); font-size: 0.8rem; font-family: inherit; outline: none;
+        }
+
+        .ai-badge {
+            display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; padding: 2px 7px;
+            border-radius: 20px; background: rgba(108,99,255,0.15); color: var(--accent);
+            border: 1px solid rgba(108,99,255,0.3); font-weight: 600;
+        }
+        .event-badge {
+            display: inline-flex; align-items: center; gap: 4px; font-size: 0.7rem; padding: 2px 7px;
+            border-radius: 20px; background: rgba(251,191,36,0.15); color: var(--yellow);
+            border: 1px solid rgba(251,191,36,0.3); font-weight: 600;
+        }
+
+        /* ── Warnings ── */
+        .warnings { display: flex; flex-direction: column; gap: 6px; }
+        .warning-item {
+            display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px;
+            font-size: 0.8rem;
+        }
+        .warning-item.high { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: var(--red); }
+        .warning-item.medium { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); color: var(--yellow); }
+        .warning-item.info { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.3); color: var(--blue); }
+
+        /* ── Route Steps ── */
+        .route-steps { margin-top: 14px; }
+        .route-step { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+        .route-step:last-child { border-bottom: none; }
+        .route-step .step-num { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
+        .route-step .step-num.depot { background: var(--green); color: #0f1117; }
+        .route-step .step-num.stop { background: var(--accent); color: white; }
+        .route-step .step-info { flex: 1; }
+        .route-step .step-meta { color: var(--text-dim); font-size: 0.72rem; }
+
+        /* ── Loading ── */
+        .loading-overlay { position: absolute; inset: 0; background: rgba(15,17,23,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; display: none; }
+        .loading-overlay.visible { display: flex; }
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 12px; font-size: 0.82rem; color: var(--text-dim); }
+
+        /* ── Custom Map Popup ── */
+        .custom-popup-box { padding: 4px; min-width: 180px; }
+        .custom-popup-box .pop-title { font-weight: 700; color: #1a1d27; font-size: 0.88rem; margin-bottom: 4px; }
+        .custom-popup-box .pop-coords { font-size: 0.72rem; color: #64748b; margin-bottom: 8px; }
+        .custom-popup-actions { display: flex; gap: 6px; margin-top: 6px; }
+        .custom-popup-actions button {
+            flex: 1; padding: 6px 8px; border: none; border-radius: 6px; font-size: 0.74rem;
+            font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .pop-btn-depot { background: #10b981; color: white; }
+        .pop-btn-depot:hover { background: #059669; }
+        .pop-btn-deliv { background: #6366f1; color: white; }
+        .pop-btn-deliv:hover { background: #4f46e5; }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 2000; display: none;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal-content {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+            padding: 24px; width: 400px; max-width: 90vw; max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 16px; }
+
+        /* ═══ Dashboard Styles ═══ */
+        .dashboard-container { padding: 20px 28px 48px; max-width: 1540px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        .dashboard-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; justify-content: space-between; }
+        .kpi-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .kpi-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+        .kpi-select { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; outline: none; }
+        .kpi-main-val { font-size: 1.85rem; font-weight: 700; display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+        .kpi-badge { font-size: 0.72rem; padding: 3px 8px; border-radius: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+        .badge-green { background: var(--green-glow); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+        .badge-yellow { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+        .badge-red { background: var(--red-glow); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+        .kpi-sub-text { font-size: 0.78rem; color: var(--text-dim); line-height: 1.35; margin-bottom: 10px; }
+        .kpi-footer-time { font-size: 0.68rem; color: var(--text-dim); border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px; }
+        .dashboard-charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; }
+        .chart-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .chart-card-title { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+        .chart-container { position: relative; height: 260px; width: 100%; }
+        .dashboard-map-table-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; }
+        .heatmap-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; }
+        .heatmap-wrapper { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+        #trafficMap { height: 420px; width: 100%; z-index: 1; }
+        .traffic-map-legend { position: absolute; bottom: 14px; right: 14px; background: rgba(26,29,39,0.9); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; z-index: 1000; font-size: 0.7rem; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+        .traffic-legend-item { display: flex; align-items: center; gap: 6px; }
+        .traffic-legend-line { width: 20px; height: 4px; border-radius: 2px; display: inline-block; }
+        .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; }
+        .table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .filter-tabs { display: flex; background: var(--surface-2); padding: 3px; border-radius: 8px; gap: 3px; }
+        .filter-btn { background: transparent; border: none; color: var(--text-dim); padding: 4px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+        .filter-btn.active { background: var(--surface-3); color: var(--text); }
+        .search-box { padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.76rem; outline: none; }
+        .table-scroll { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+        .roads-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; text-align: left; }
+        .roads-table th { background: var(--surface-2); color: var(--text-dim); padding: 8px 10px; font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+        .roads-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .roads-table tr.clickable-row { cursor: pointer; }
+        .roads-table tr.clickable-row:hover { background: rgba(108,99,255,0.12) !important; }
+        .roads-table tr.selected-row { background: rgba(108,99,255,0.25) !important; border-left: 3px solid var(--accent); }
+        .road-name-cell { font-weight: 500; color: var(--text); max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .progress-bar-container { width: 55px; height: 5px; background: var(--surface-3); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 4px; }
+        .progress-bar-fill { height: 100%; border-radius: 3px; }
+
+        @media (max-width: 1100px) {
+            .dashboard-kpi-grid, .dashboard-charts-grid, .dashboard-map-table-grid, .optimizer-layout { grid-template-columns: 1fr; }
+            .sidebar { max-height: none; }
+            #map { min-height: 380px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+    <div class="header-brand">
+        <h1>🚛 FLEX-VRP</h1>
+        <span class="badge">v2.1</span>
+    </div>
+    <nav class="nav-tabs">
+        <button class="nav-tab active" id="tabOptimizerBtn" onclick="switchTab('optimizer')">
+            <span>🗺️</span> Tối ưu Lộ trình
+        </button>
+        <button class="nav-tab" id="tabDashboardBtn" onclick="switchTab('dashboard')">
+            <span>📊</span> Dashboard Giao thông
+        </button>
+    </nav>
+</header>
+
+<!-- ═══ TAB 1: OPTIMIZER ═══ -->
+<div id="viewOptimizer" class="tab-view active">
+    <div class="optimizer-layout">
+        <aside class="sidebar">
+
+            <!-- ── Unified Location Manager ── -->
+            <div>
+                <div class="section-title">📍 Quản lý Địa điểm</div>
+                <div class="card">
+                    <div class="pill-toggle">
+                        <button class="pill-btn active" id="pillDepot" onclick="setLocationMode('depot')">🏭 Thêm Kho</button>
+                        <button class="pill-btn" id="pillDelivery" onclick="setLocationMode('delivery')">📦 Thêm Điểm giao</button>
+                    </div>
+
+                    <!-- Autocomplete Search with Detailed Previews -->
+                    <div class="search-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="locationSearch" placeholder="Nhập địa chỉ, tên đường, khu vực..." autocomplete="off"
+                               oninput="onSearchInput(this.value)" onkeydown="onSearchKeydown(event)">
+                        <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
+                    </div>
+
+                    <!-- Map Picking Button -->
+                    <button class="map-pick-btn" id="mapPickBtn" onclick="toggleMapPickingMode()">
+                        <span id="mapPickIcon">🎯</span>
+                        <span id="mapPickText">Chọn vị trí trực tiếp trên bản đồ</span>
+                    </button>
+
+                    <!-- Depots List (Multi-depots) -->
+                    <div class="section-title" style="margin-top: 6px;">
+                        <span>🏭 Danh sách Kho (<span id="depotCount">1</span>)</span>
+                    </div>
+                    <div class="item-list" id="depotList" style="margin-bottom: 12px;"></div>
+
+                    <!-- Delivery List -->
+                    <div class="section-title">
+                        <span>📦 Điểm giao hàng (<span id="deliveryCount">0</span>/20)</span>
+                        <button class="icon-btn delete" style="font-size:0.75rem;" onclick="clearDeliveries()" title="Xóa hết điểm giao">🗑️ Xóa</button>
+                    </div>
+                    <div class="item-list" id="deliveryList">
+                        <div class="empty-state" id="emptyState">
+                            Tìm kiếm địa chỉ hoặc click nút<br><strong>"Chọn vị trí trên bản đồ"</strong> để thêm
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Vehicle & Route Config ── -->
+            <div>
+                <div class="section-title">🚛 Loại xe & Lịch trình</div>
+                <div class="card" style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Vehicle Select -->
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label>Phương tiện vận chuyển</label>
+                        <div class="vehicle-select-wrapper">
+                            <select id="vehicleSelect">
+                                <option value="">Mặc định (Tốc độ TB 36 km/h)</option>
+                            </select>
+                            <button class="btn btn-secondary btn-sm" onclick="openVehicleModal()">+ Xe</button>
+                        </div>
+                    </div>
+
+                    <!-- Return Toggle -->
+                    <div class="toggle-group">
+                        <div class="toggle-info">
+                            <div class="toggle-title">🔄 Quay về kho xuất phát</div>
+                            <div class="toggle-subtitle" id="returnStatusText">Khứ hồi (về lại kho)</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="returnToDepot" checked onchange="updateReturnText(this)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- Show Traffic Lights Toggle -->
+                    <div class="toggle-group">
+                        <div class="toggle-info">
+                            <div class="toggle-title">🚦 Đèn giao thông</div>
+                            <div class="toggle-subtitle">Hiện icon đèn đỏ trên tuyến</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="showTrafficLights" checked onchange="toggleTrafficLightVisibility(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- Departure Hour -->
+                    <div class="input-group" style="margin-bottom: 0;">
+                        <label>Khung giờ di chuyển</label>
+                        <select id="targetHour">
+                            <option value="">🕒 Thời gian thực (hiện tại)</option>
+                            <option value="8">08:00 (Cao điểm sáng)</option>
+                            <option value="12">12:00 (Trưa thông thoáng)</option>
+                            <option value="17" selected>17:00 (Cao điểm chiều)</option>
+                            <option value="20">20:00 (Tối mát mẻ)</option>
+                            <option value="0">00:00 (Đêm khuya)</option>
+                        </select>
+                    </div>
+
+                    <!-- Weather -->
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;font-weight:500;">Thời tiết dự báo</label>
+                        <div class="weather-options">
+                            <div class="weather-opt active" data-factor="1.0" onclick="selectWeather(this)"><span class="emoji">☀️</span><span class="label">Nắng</span></div>
+                            <div class="weather-opt" data-factor="1.15" onclick="selectWeather(this)"><span class="emoji">🌧️</span><span class="label">Mưa nhẹ</span></div>
+                            <div class="weather-opt" data-factor="1.35" onclick="selectWeather(this)"><span class="emoji">⛈️</span><span class="label">Mưa to</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Optimize Button -->
+            <button class="btn btn-primary btn-optimize" id="optimizeBtn" onclick="runOptimization()" disabled>
+                <span>🚀</span> Tìm đường tối ưu
+            </button>
+        </aside>
+
+        <!-- ── Map + Analysis ── -->
+        <div class="map-area">
+            <div id="map"></div>
+            <div class="loading-overlay" id="loadingOverlay">
+                <div style="text-align:center;">
+                    <div class="spinner"></div>
+                    <div class="loading-text">Đang phân tích giao thông & tối ưu hóa tuyến đường...</div>
+                </div>
+            </div>
+            <div class="analysis-panel" id="analysisPanel">
+                <div class="section-title" style="margin-bottom:12px;">📊 Kết quả phân tích lộ trình</div>
+
+                <!-- 3 Alternative Routes Tabs -->
+                <div class="route-tabs-container" id="routeTabsContainer" style="display:none;">
+                    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;font-weight:600;">
+                        💡 Gợi ý các tuyến đường thay thế (Bấm để chọn hoặc Click trực tiếp vào đường trên bản đồ):
+                    </div>
+                    <div class="route-tabs" id="routeTabs"></div>
+                </div>
+
+                <div class="stats-grid" id="statsGrid"></div>
+                <div id="warningsContainer"></div>
+                <div class="route-steps" id="routeSteps"></div>
+
+                <!-- Trip Control -->
+                <div class="trip-control" id="tripControl" style="display:none;">
+                    <div class="trip-status" id="tripStatus">Sẵn sàng khởi hành</div>
+                    <button class="btn btn-primary btn-sm" id="tripStartBtn" onclick="startTrip()">🚀 Khởi hành</button>
+                    <button class="btn btn-secondary btn-sm" id="tripManualBtn" onclick="toggleManualForm()">📝 Nhập thủ công</button>
+                </div>
+                <div class="trip-manual-form" id="tripManualForm">
+                    <div>
+                        <label>Giờ đi</label>
+                        <input type="time" id="manualDeparture" class="mini-input" value="17:00">
+                    </div>
+                    <div>
+                        <label>Giờ đến</label>
+                        <input type="time" id="manualArrival" class="mini-input" value="17:55">
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="submitManualTime()">💾 Lưu & AI Học</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ TAB 2: DASHBOARD ═══ -->
+<div id="viewDashboard" class="tab-view">
+    <div class="dashboard-container">
+        <div class="dashboard-kpi-grid">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-header"><span class="kpi-title">🌤️ Thời tiết TP.HCM</span><span class="kpi-badge badge-green" id="kpiWeatherBadge">☀️ Nắng</span></div>
+                    <div class="kpi-main-val"><span id="kpiWeatherTemp">31.0°C</span><span style="font-size:0.95rem;font-weight:500;color:var(--text-dim);" id="kpiWeatherDesc">Nắng ráo</span></div>
+                    <div class="kpi-sub-text" id="kpiWeatherDetails">Đang tải...</div>
+                </div>
+                <div class="kpi-footer-time" id="kpiWeatherUpdated">🕒 Đang kết nối...</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(108,99,255,0.4);">
+                <div>
+                    <div class="kpi-header"><span class="kpi-title" style="color:var(--accent);">🚦 Mật độ Giao thông</span><select class="kpi-select" id="dashboardHourSelect" onchange="onDashboardHourChange(this.value)"></select></div>
+                    <div class="kpi-main-val"><span id="kpiTrafficCongestion">76.5%</span><span class="kpi-badge badge-green" id="kpiTrafficBadge">Thông</span></div>
+                    <div class="kpi-sub-text" id="kpiSpeedDetails">Đang tải...</div>
+                </div>
+                <div class="kpi-footer-time" id="kpiTrafficUpdated">🕒 Đang tải...</div>
+            </div>
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-header"><span class="kpi-title">⚠️ Tuyến đường kẹt xe</span><span class="kpi-badge badge-yellow" id="kpiHeavyCountBadge">0 điểm nóng</span></div>
+                    <div class="kpi-main-val" style="font-size:1.4rem;" id="kpiPeakHoursText">08:00 & 17:00</div>
+                    <div class="kpi-sub-text" id="kpiRecommendationText">Đang tải...</div>
+                </div>
+                <div class="kpi-footer-time">💡 Giờ vàng: 12:00-14:00 & sau 21:00</div>
+            </div>
+        </div>
+        <div class="dashboard-charts-grid">
+            <div class="chart-card"><div class="chart-card-header"><span class="chart-card-title">📈 Diễn biến Kẹt xe & Tốc độ 24h</span></div><div class="chart-container"><canvas id="traffic24hChart"></canvas></div></div>
+            <div class="chart-card"><div class="chart-card-header"><span class="chart-card-title">🌦️ Nhiệt độ & Khả năng Mưa 24h</span></div><div class="chart-container"><canvas id="weather24hChart"></canvas></div></div>
+        </div>
+        <div class="dashboard-map-table-grid">
+            <div class="heatmap-card">
+                <div class="chart-card-header"><span class="chart-card-title">🗺️ Bản đồ Tình trạng Đường phố</span><span style="font-size:0.75rem;color:var(--text-dim);" id="heatmapHourLabel">17:00</span></div>
+                <div class="heatmap-wrapper">
+                    <div id="trafficMap"></div>
+                    <div class="traffic-map-legend">
+                        <div class="traffic-legend-item"><span class="traffic-legend-line" style="background:#ef4444;"></span><span>🔴 Kẹt nặng (&lt;60%)</span></div>
+                        <div class="traffic-legend-item"><span class="traffic-legend-line" style="background:#f59e0b;"></span><span>🟡 Kẹt vừa (60-75%)</span></div>
+                        <div class="traffic-legend-item"><span class="traffic-legend-line" style="background:#22c55e;"></span><span>🟢 Thông thoáng (&gt;75%)</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="table-card">
+                <div class="table-toolbar">
+                    <div class="filter-tabs">
+                        <button class="filter-btn active" onclick="setRoadTableFilter('all',this)">Tất cả (<span id="countAllRoads">0</span>)</button>
+                        <button class="filter-btn" onclick="setRoadTableFilter('heavy',this)">🔴 Kẹt (<span id="countHeavyRoads">0</span>)</button>
+                        <button class="filter-btn" onclick="setRoadTableFilter('smooth',this)">🟢 Thoáng</button>
+                    </div>
+                    <input type="text" class="search-box" id="searchRoadInput" placeholder="🔍 Tìm tên đường..." oninput="onSearchRoad(this.value)">
+                </div>
+                <div class="table-scroll"><table class="roads-table"><thead><tr><th>Tên đường</th><th>Vận tốc</th><th>Tối đa</th><th>Thông thoáng</th></tr></thead><tbody id="roadsTableBody"><tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:20px;">Đang tải...</td></tr></tbody></table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Vehicle Modal ── -->
+<div class="modal-overlay" id="vehicleModal">
+    <div class="modal-content">
+        <div class="modal-title">🚛 Thêm xe giao hàng mới</div>
+        <div class="input-group">
+            <label>Tên xe</label>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="vehName" placeholder="VD: Honda Wave RSX, Hyundai Porter 150">
+                <button class="btn btn-primary btn-sm" onclick="lookupVehicle()" id="vehLookupBtn">🔍 AI Tra cứu</button>
+            </div>
+        </div>
+        <div id="vehLookupResult" style="display:none;margin-bottom:12px;padding:10px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);border-radius:8px;font-size:0.8rem;"></div>
+        <div class="input-group"><label>Loại phương tiện</label><select id="vehType"><option value="xe_may">Xe máy giao hàng</option><option value="xe_van">Xe Van đô thị</option><option value="xe_tai_nhe">Xe tải nhẹ (&lt;3.5 tấn)</option><option value="xe_tai_nang">Xe tải nặng (&gt;3.5 tấn)</option></select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="input-group"><label>Tốc độ max (km/h)</label><input type="number" id="vehMaxSpeed" value="60"></div>
+            <div class="input-group"><label>TB nội thành (km/h)</label><input type="number" id="vehAvgSpeed" value="25"></div>
+            <div class="input-group"><label>Tải trọng (kg)</label><input type="number" id="vehCapacityKg" value="20"></div>
+            <div class="input-group"><label>Thể tích (m³)</label><input type="number" id="vehCapacityCbm" value="0.05" step="0.01"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+            <button class="btn btn-primary" onclick="saveVehicle()">💾 Lưu xe</button>
+            <button class="btn btn-secondary" onclick="closeVehicleModal()">Hủy</button>
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ═══════════════════════════════════════
+// GLOBAL STATE
+// ═══════════════════════════════════════
+let depots = [
+    { id: 'depot-default', name: 'Kho FLEX-VRP (Quận 7)', lat: 10.7380, lon: 106.7220, is_primary: true }
+];
+let activeDepotIndex = 0;
+let deliveries = [];
+let weatherFactor = 1.0;
+let locationMode = 'delivery'; // 'depot' or 'delivery'
+let isMapPickingMode = false;
+
+let map;
+let depotMarkers = [];
+let deliveryMarkers = [];
+let allAlternativePolylines = []; // Mảng chứa các layer polylines của cả 3 routes
+let trafficLightMarkers = [];
+let hoverPreviewMarker = null;
+
+let currentTripId = null;
+let currentOptData = null;
+let currentAlternatives = [];
+let activeAlternativeIdx = 0;
+
+let searchTimeout = null;
+let currentAutocompleteResults = [];
+
+// Dashboard
+let trafficMap = null, trafficMapLayers = {}, selectedRoadWayId = null;
+let chartTraffic24h = null, chartWeather24h = null;
+let currentAnalyticsData = null, activeRoadFilter = 'all', dashboardInitialized = false;
+
+// ═══════════════════════════════════════
+// TAB SWITCHER
+// ═══════════════════════════════════════
+function switchTab(name) {
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+    if (name === 'optimizer') {
+        document.getElementById('tabOptimizerBtn').classList.add('active');
+        document.getElementById('viewOptimizer').classList.add('active');
+        if (map) setTimeout(() => map.invalidateSize(), 200);
+    } else {
+        document.getElementById('tabDashboardBtn').classList.add('active');
+        document.getElementById('viewDashboard').classList.add('active');
+        if (!dashboardInitialized) { initDashboard(); dashboardInitialized = true; }
+        else if (trafficMap) setTimeout(() => trafficMap.invalidateSize(), 200);
+    }
+}
+
+// ═══════════════════════════════════════
+// LOCATION MODE
+// ═══════════════════════════════════════
+function setLocationMode(mode) {
+    locationMode = mode;
+    document.getElementById('pillDepot').classList.toggle('active', mode === 'depot');
+    document.getElementById('pillDelivery').classList.toggle('active', mode === 'delivery');
+    document.getElementById('locationSearch').placeholder = mode === 'depot' ? 'Nhập địa chỉ thêm Kho mới...' : 'Nhập địa chỉ thêm Điểm giao hàng...';
+}
+
+function toggleMapPickingMode() {
+    isMapPickingMode = !isMapPickingMode;
+    const btn = document.getElementById('mapPickBtn');
+    if (isMapPickingMode) {
+        btn.classList.add('active');
+        document.getElementById('mapPickText').textContent = 'Đang bật chọn trên bản đồ (Click vị trí bất kỳ)';
+        map.getContainer().style.cursor = 'crosshair';
+    } else {
+        btn.classList.remove('active');
+        document.getElementById('mapPickText').textContent = 'Chọn vị trí trực tiếp trên bản đồ';
+        map.getContainer().style.cursor = '';
+    }
+}
+
+// ═══════════════════════════════════════
+// AUTOCOMPLETE SEARCH (WITH RICH HOVER & PREVIEWS)
+// ═══════════════════════════════════════
+function onSearchInput(val) {
+    clearTimeout(searchTimeout);
+    const dd = document.getElementById('autocompleteDropdown');
+    if (val.trim().length < 2) {
+        dd.classList.remove('visible');
+        removeHoverPreviewMarker();
+        return;
+    }
+    dd.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:0.8rem;">⏳ Đang tìm kiếm địa chỉ chính xác...</div>';
+    dd.classList.add('visible');
+    searchTimeout = setTimeout(() => nominatimSearch(val.trim()), 350);
+}
+
+async function nominatimSearch(query) {
+    const dd = document.getElementById('autocompleteDropdown');
+    try {
+        const resp = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Ho Chi Minh City, Vietnam')}&format=json&limit=6&addressdetails=1`,
+            { headers: { 'Accept-Language': 'vi' } }
+        );
+        const results = await resp.json();
+        currentAutocompleteResults = results;
+        if (results.length === 0) {
+            dd.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:0.8rem;">Không tìm thấy địa điểm phù hợp</div>';
+            return;
+        }
+
+        dd.innerHTML = results.map((r, i) => {
+            const mainName = r.name || r.display_name.split(',')[0];
+            const fullAddress = r.display_name;
+            const lat = parseFloat(r.lat).toFixed(4);
+            const lon = parseFloat(r.lon).toFixed(4);
+
+            return `
+                <div class="autocomplete-item" id="ac-item-${i}"
+                     onmouseenter="onHoverAutocomplete(${i})"
+                     onmouseleave="onLeaveAutocomplete(${i})"
+                     onclick="selectAutocomplete(${i})">
+                    <div class="ac-header">
+                        <span class="ac-title">📍 ${mainName}</span>
+                        <span class="ac-coords">${lat}, ${lon}</span>
+                    </div>
+                    <div class="ac-full-address">${fullAddress}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        dd.innerHTML = '<div style="padding:12px;text-align:center;color:var(--red);font-size:0.8rem;">Lỗi kết nối tìm kiếm</div>';
+    }
+}
+
+function onHoverAutocomplete(idx) {
+    const r = currentAutocompleteResults[idx];
+    if (!r) return;
+    const lat = parseFloat(r.lat);
+    const lon = parseFloat(r.lon);
+    const mainName = r.name || r.display_name.split(',')[0];
+
+    // Tạo preview marker trên bản đồ
+    removeHoverPreviewMarker();
+    hoverPreviewMarker = L.circleMarker([lat, lon], {
+        radius: 9, fillColor: '#8b5cf6', color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 0.8
+    }).addTo(map);
+    hoverPreviewMarker.bindTooltip(`📍 ${mainName}`, { permanent: true, direction: 'top', offset: [0, -10] }).openTooltip();
+    map.panTo([lat, lon], { animate: true, duration: 0.5 });
+}
+
+function onLeaveAutocomplete(idx) {
+    removeHoverPreviewMarker();
+}
+
+function removeHoverPreviewMarker() {
+    if (hoverPreviewMarker) {
+        map.removeLayer(hoverPreviewMarker);
+        hoverPreviewMarker = null;
+    }
+}
+
+function selectAutocomplete(idx) {
+    const r = currentAutocompleteResults[idx];
+    if (!r) return;
+    const lat = parseFloat(r.lat);
+    const lon = parseFloat(r.lon);
+    const mainName = r.name || r.display_name.split(',')[0];
+
+    removeHoverPreviewMarker();
+    document.getElementById('autocompleteDropdown').classList.remove('visible');
+    document.getElementById('locationSearch').value = '';
+
+    if (locationMode === 'depot') {
+        addDepot(mainName, lat, lon);
+    } else {
+        addDelivery(mainName, lat, lon);
+    }
+    map.setView([lat, lon], 15);
+}
+
+function onSearchKeydown(e) {
+    if (e.key === 'Enter') {
+        const dd = document.getElementById('autocompleteDropdown');
+        if (currentAutocompleteResults.length > 0) {
+            selectAutocomplete(0);
+        }
+    }
+}
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrapper')) {
+        document.getElementById('autocompleteDropdown')?.classList.remove('visible');
+        removeHoverPreviewMarker();
+    }
+});
+
+// ═══════════════════════════════════════
+// MAP INITIALIZATION & INTERACTIVE CLICK POPUP
+// ═══════════════════════════════════════
+function initMap() {
+    map = L.map('map', { zoomControl: true }).setView([10.775, 106.695], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> | FLEX-VRP', maxZoom: 19,
+    }).addTo(map);
+
+    renderDepotList();
+
+    // Map Click Interaction (Popup with Buttons instead of auto-adding)
+    map.on('click', async e => {
+        const lat = parseFloat(e.latlng.lat.toFixed(5));
+        const lon = parseFloat(e.latlng.lng.toFixed(5));
+
+        // Quick reverse geocode for address name
+        let placeName = `Vị trí (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, { headers: { 'Accept-Language': 'vi' } });
+            const d = await res.json();
+            if (d && d.display_name) {
+                placeName = d.name || d.display_name.split(',')[0];
+            }
+        } catch (err) {}
+
+        const popupContent = `
+            <div class="custom-popup-box">
+                <div class="pop-title">📍 ${placeName}</div>
+                <div class="pop-coords">Tọa độ: ${lat}, ${lon}</div>
+                <div style="font-size:0.75rem;color:#475569;margin-bottom:6px;">Chọn thao tác:</div>
+                <div class="custom-popup-actions">
+                    <button class="pop-btn-depot" onclick="confirmAddDepot('${placeName.replace(/'/g, "\\'")}', ${lat}, ${lon})">🏭 Đặt làm Kho</button>
+                    <button class="pop-btn-deliv" onclick="confirmAddDelivery('${placeName.replace(/'/g, "\\'")}', ${lat}, ${lon})">📦 Thêm Điểm giao</button>
+                </div>
+            </div>
+        `;
+
+        L.popup()
+            .setLatLng([lat, lon])
+            .setContent(popupContent)
+            .openOn(map);
+    });
+}
+
+function confirmAddDepot(name, lat, lon) {
+    map.closePopup();
+    addDepot(name, lat, lon);
+}
+
+function confirmAddDelivery(name, lat, lon) {
+    map.closePopup();
+    addDelivery(name, lat, lon);
+}
+
+// ═══════════════════════════════════════
+// MULTIPLE DEPOTS MANAGEMENT (PERSISTENT DB)
+// ═══════════════════════════════════════
+async function addDepot(name, lat, lon) {
+    const newDepot = { id: `depot-${Date.now()}`, name, lat, lon, is_primary: depots.length === 0 };
+    depots.push(newDepot);
+    if (depots.length === 1) activeDepotIndex = 0;
+    renderDepotList();
+    refreshDepotMarkers();
+    updateOptimizeBtn();
+
+    // Lưu vào SQLite DB
+    try {
+        const resp = await fetch('/api/locations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, lat, lon, type: 'depot' })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            newDepot.db_id = data.id;
+        }
+    } catch (e) { console.error('Lỗi lưu kho vào DB:', e); }
+}
+
+function selectPrimaryDepot(index) {
+    activeDepotIndex = index;
+    depots.forEach((d, i) => d.is_primary = (i === index));
+    renderDepotList();
+    refreshDepotMarkers();
+}
+
+async function removeDepot(index, e) {
+    if (e) e.stopPropagation();
+    if (depots.length <= 1) {
+        alert('Cần ít nhất 1 Kho xuất phát!');
+        return;
+    }
+    const d = depots[index];
+    depots.splice(index, 1);
+    if (activeDepotIndex >= depots.length) activeDepotIndex = 0;
+    if (depots.length > 0) depots[activeDepotIndex].is_primary = true;
+    renderDepotList();
+    refreshDepotMarkers();
+    updateOptimizeBtn();
+
+    // Xóa khỏi SQLite DB
+    if (d && d.db_id) {
+        try {
+            await fetch(`/api/locations/${d.db_id}`, { method: 'DELETE' });
+        } catch (err) { console.error('Lỗi xóa kho khỏi DB:', err); }
+    }
+}
+
+function renderDepotList() {
+    const listEl = document.getElementById('depotList');
+    document.getElementById('depotCount').textContent = depots.length;
+    listEl.innerHTML = depots.map((d, i) => {
+        const isPrimary = (i === activeDepotIndex);
+        return `
+            <div class="loc-item ${isPrimary ? 'selected-depot' : ''}" onclick="selectPrimaryDepot(${i})">
+                <div class="badge-num badge-depot">${isPrimary ? '⭐' : '🏭'}</div>
+                <div class="info">
+                    <div class="name">${d.name} ${isPrimary ? '<span style="color:var(--green);font-size:0.7rem;font-weight:700;">(Kho chính)</span>' : ''}</div>
+                    <div class="coords">${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}</div>
+                </div>
+                <div class="actions">
+                    ${depots.length > 1 ? `<button class="icon-btn delete" onclick="removeDepot(${i}, event)" title="Xóa kho">✕</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function refreshDepotMarkers() {
+    depotMarkers.forEach(m => map.removeLayer(m));
+    depotMarkers = [];
+    depots.forEach((d, i) => {
+        const isPrimary = (i === activeDepotIndex);
+        const iconColor = isPrimary ? '#10b981' : '#64748b';
+        const m = L.marker([d.lat, d.lon], {
+            icon: L.divIcon({
+                className: '',
+                html: `<div style="background:${iconColor};border:3px solid white;border-radius:50%;width:26px;height:26px;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:13px;color:white;">🏭</div>`,
+                iconSize: [26, 26], iconAnchor: [13, 13]
+            })
+        }).addTo(map);
+        m.bindPopup(`<b>${d.name}</b><br>${isPrimary ? '⭐ <strong>Kho xuất phát chính</strong>' : '<button onclick="selectPrimaryDepot('+i+')">Chọn làm kho xuất phát</button>'}`);
+        depotMarkers.push(m);
+    });
+}
+
+// ═══════════════════════════════════════
+// DELIVERY POINTS MANAGEMENT (PERSISTENT DB)
+// ═══════════════════════════════════════
+async function addDelivery(name, lat, lon) {
+    if (deliveries.length >= 20) { alert('Tối đa 20 điểm giao hàng!'); return; }
+    const newDelivery = { name, lat, lon };
+    deliveries.push(newDelivery);
+    renderDeliveryList();
+    addDeliveryMarker(name, lat, lon, deliveries.length);
+    updateOptimizeBtn();
+
+    // Lưu vào SQLite DB
+    try {
+        const resp = await fetch('/api/locations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, lat, lon, type: 'delivery' })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            newDelivery.db_id = data.id;
+        }
+    } catch (e) { console.error('Lỗi lưu điểm giao vào DB:', e); }
+}
+
+async function removeDelivery(i) {
+    const d = deliveries[i];
+    deliveries.splice(i, 1);
+    renderDeliveryList();
+    refreshDeliveryMarkers();
+    updateOptimizeBtn();
+
+    // Xóa khỏi SQLite DB
+    if (d && d.db_id) {
+        try {
+            await fetch(`/api/locations/${d.db_id}`, { method: 'DELETE' });
+        } catch (err) { console.error('Lỗi xóa điểm giao khỏi DB:', err); }
+    }
+}
+
+async function clearDeliveries() {
+    if (deliveries.length === 0) return;
+    const oldDeliveries = [...deliveries];
+    deliveries = [];
+    renderDeliveryList();
+    refreshDeliveryMarkers();
+    clearAllRouteLayers();
+    updateOptimizeBtn();
+    document.getElementById('analysisPanel').classList.remove('visible');
+
+    // Xóa tất cả trong SQLite DB
+    for (const d of oldDeliveries) {
+        if (d.db_id) {
+            try {
+                await fetch(`/api/locations/${d.db_id}`, { method: 'DELETE' });
+            } catch (err) {}
+        }
+    }
+}
+
+async function loadSavedLocations() {
+    try {
+        const resp = await fetch('/api/locations');
+        const data = await resp.json();
+        if (data.success && data.locations && data.locations.length > 0) {
+            const savedDepots = data.locations.filter(l => l.type === 'depot');
+            const savedDeliveries = data.locations.filter(l => l.type === 'delivery');
+
+            if (savedDepots.length > 0) {
+                depots = savedDepots.map((d, idx) => ({
+                    id: `depot-${d.id}`,
+                    db_id: d.id,
+                    name: d.name,
+                    lat: d.lat,
+                    lon: d.lon,
+                    is_primary: idx === 0
+                }));
+                activeDepotIndex = 0;
+            }
+
+            if (savedDeliveries.length > 0) {
+                deliveries = savedDeliveries.map(d => ({
+                    db_id: d.id,
+                    name: d.name,
+                    lat: d.lat,
+                    lon: d.lon
+                }));
+            }
+
+            renderDepotList();
+            refreshDepotMarkers();
+            renderDeliveryList();
+            refreshDeliveryMarkers();
+            updateOptimizeBtn();
+
+            // Fit bounds nếu có điểm
+            const allPts = [
+                ...depots.map(d => [d.lat, d.lon]),
+                ...deliveries.map(d => [d.lat, d.lon])
+            ];
+            if (allPts.length > 1 && map) {
+                map.fitBounds(allPts, { padding: [50, 50] });
+            }
+        }
+    } catch (e) {
+        console.error('Lỗi tải danh sách vị trí đã lưu:', e);
+    }
+}
+
+function renderDeliveryList() {
+    const c = document.getElementById('deliveryList');
+    const e = document.getElementById('emptyState');
+    document.getElementById('deliveryCount').textContent = deliveries.length;
+    if (deliveries.length === 0) {
+        c.innerHTML = '';
+        c.appendChild(e);
+        e.style.display = 'block';
+        return;
+    }
+    if (e) e.style.display = 'none';
+    c.innerHTML = deliveries.map((d, i) => `
+        <div class="loc-item">
+            <div class="badge-num badge-delivery">${i+1}</div>
+            <div class="info" onclick="map.panTo([${d.lat}, ${d.lon}])">
+                <div class="name">${d.name}</div>
+                <div class="coords">${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}</div>
+            </div>
+            <button class="icon-btn delete" onclick="removeDelivery(${i})">✕</button>
+        </div>
+    `).join('');
+}
+
+function addDeliveryMarker(name, lat, lon, num) {
+    const m = L.marker([lat, lon], {
+        icon: L.divIcon({
+            className: '',
+            html: `<div style="background:#6c63ff;border:2px solid white;border-radius:50%;width:26px;height:26px;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${num}</div>`,
+            iconSize: [26, 26], iconAnchor: [13, 13]
+        })
+    }).addTo(map);
+    m.bindPopup(`<b>${name}</b><br>Điểm #${num}`);
+    deliveryMarkers.push(m);
+}
+
+function refreshDeliveryMarkers() {
+    deliveryMarkers.forEach(m => map.removeLayer(m));
+    deliveryMarkers = [];
+    deliveries.forEach((d, i) => addDeliveryMarker(d.name, d.lat, d.lon, i+1));
+}
+
+function updateOptimizeBtn() {
+    document.getElementById('optimizeBtn').disabled = (deliveries.length < 1 || depots.length < 1);
+}
+
+function selectWeather(el) {
+    document.querySelectorAll('.weather-opt').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    weatherFactor = parseFloat(el.dataset.factor);
+}
+
+function updateReturnText(cb) {
+    document.getElementById('returnStatusText').textContent = cb.checked ? 'Khứ hồi (về lại kho)' : '1 chiều (kết thúc tại điểm cuối)';
+}
+
+function toggleTrafficLightVisibility(visible) {
+    trafficLightMarkers.forEach(m => {
+        if (m.getElement()) m.getElement().style.display = visible ? '' : 'none';
+    });
+}
+
+function clearAllRouteLayers() {
+    allAlternativePolylines.forEach(lines => lines.forEach(l => map.removeLayer(l)));
+    allAlternativePolylines = [];
+    trafficLightMarkers.forEach(m => map.removeLayer(m));
+    trafficLightMarkers = [];
+}
+
+// ═══════════════════════════════════════
+// VRP OPTIMIZATION
+// ═══════════════════════════════════════
+async function runOptimization() {
+    const btn = document.getElementById('optimizeBtn');
+    const loading = document.getElementById('loadingOverlay');
+    btn.disabled = true;
+    loading.classList.add('visible');
+    clearAllRouteLayers();
+
+    const currentDepot = depots[activeDepotIndex] || depots[0];
+    const vehicleId = document.getElementById('vehicleSelect').value || null;
+
+    try {
+        const resp = await fetch('/api/optimize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                depot: { name: currentDepot.name, lat: currentDepot.lat, lon: currentDepot.lon },
+                depots: depots,
+                deliveries: deliveries,
+                weather_factor: weatherFactor,
+                target_hour: document.getElementById('targetHour').value,
+                return_to_depot: document.getElementById('returnToDepot').checked,
+                vehicle_id: vehicleId,
+                time_calibration_factor: 1.8 // Hệ số chuẩn thực tế TP.HCM
+            }),
+        });
+
+        const data = await resp.json();
+        if (data.success) {
+            currentOptData = data;
+            currentTripId = data.trip_id;
+            currentAlternatives = data.alternatives || [];
+            activeAlternativeIdx = 0;
+
+            await renderAllAlternativeRoutesOnMap(currentAlternatives, data);
+            renderAnalysis(data);
+        } else {
+            alert(data.error || 'Lỗi xử lý');
+        }
+    } catch (e) {
+        alert('Không thể kết nối máy chủ tối ưu.');
+        console.error(e);
+    }
+    loading.classList.remove('visible');
+    btn.disabled = false;
+}
+
+async function getOSRMRoute(wps) {
+    const cs = wps.map(p => `${p[1]},${p[0]}`).join(';');
+    try {
+        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${cs}?overview=full&geometries=geojson&steps=true`);
+        const d = await r.json();
+        if (d.code === 'Ok' && d.routes.length > 0) {
+            return d.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        }
+    } catch (e) { console.warn('OSRM fallback', e); }
+    return wps;
+}
+
+// ═══════════════════════════════════════
+// RENDER ALL 3 ALTERNATIVE ROUTES ON MAP WITH CLICK-TO-SWITCH
+// ═══════════════════════════════════════
+const ROUTE_STYLES = [
+    { activeColor: '#22c55e', inactiveColor: '#34d399', name: 'Route A (Nhanh nhất)' },
+    { activeColor: '#3b82f6', inactiveColor: '#60a5fa', name: 'Route B (Ngắn nhất)' },
+    { activeColor: '#a855f7', inactiveColor: '#c084fc', name: 'Route C (Ít đèn đỏ)' }
+];
+
+async function renderAllAlternativeRoutesOnMap(alternatives, data) {
+    clearAllRouteLayers();
+    refreshDepotMarkers();
+    refreshDeliveryMarkers();
+
+    const isRet = data.return_to_depot !== false;
+    allAlternativePolylines = [];
+
+    // Cache OSRM paths
+    for (let altIdx = 0; altIdx < alternatives.length; altIdx++) {
+        const alt = alternatives[altIdx];
+        const route = alt.route;
+        const coords = route.map(r => [r.lat, r.lon]);
+        const linesForAlt = [];
+        const isCurrentActive = (altIdx === activeAlternativeIdx);
+        const style = ROUTE_STYLES[altIdx] || { activeColor: '#6c63ff', inactiveColor: '#94a3b8' };
+
+        for (let i = 0; i < coords.length - 1; i++) {
+            const isReturn = isRet && (i === coords.length - 2);
+            const path = await getOSRMRoute([coords[i], coords[i+1]]);
+
+            const line = L.polyline(path, {
+                color: isCurrentActive ? (isReturn ? '#6c63ff' : style.activeColor) : style.inactiveColor,
+                weight: isCurrentActive ? 6 : 4,
+                opacity: isCurrentActive ? 0.9 : 0.4,
+                dashArray: isCurrentActive ? (isReturn ? '10,8' : null) : '6,6',
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(map);
+
+            // Click vào polyline trên map để kích hoạt route đó
+            line.on('click', () => {
+                switchAlternativeRoute(altIdx);
+            });
+
+            // Hover tooltip trên đường
+            line.bindTooltip(`📍 <strong>${alt.tag}</strong> (${alt.total_time_min.toFixed(0)} phút - ${alt.total_distance_km.toFixed(1)} km)<br><span style="font-size:0.7rem;color:var(--accent);">👉 Click để chọn tuyến này</span>`, {
+                sticky: true
+            });
+
+            linesForAlt.push(line);
+        }
+        allAlternativePolylines.push(linesForAlt);
+    }
+
+    // Traffic Lights Markers
+    if (document.getElementById('showTrafficLights').checked && data.traffic_lights_on_route) {
+        data.traffic_lights_on_route.forEach(tl => {
+            const m = L.marker([tl.lat, tl.lon], {
+                icon: L.divIcon({
+                    className: '',
+                    html: `<div style="font-size:14px;opacity:0.75;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));">🚦</div>`,
+                    iconSize: [16, 16], iconAnchor: [8, 8]
+                })
+            }).addTo(map);
+            m.bindPopup('🚦 <strong>Đèn giao thông</strong><br>Thời gian chờ TB: ~21 giây');
+            trafficLightMarkers.push(m);
+        });
+    }
+
+    // Zoom vừa vặn
+    const allCoords = alternatives[0]?.route.map(r => [r.lat, r.lon]) || [];
+    if (allCoords.length > 0) {
+        map.fitBounds(allCoords, { padding: [60, 60] });
+    }
+}
+
+function switchAlternativeRoute(newIdx) {
+    if (newIdx < 0 || newIdx >= currentAlternatives.length) return;
+    activeAlternativeIdx = newIdx;
+
+    // Cập nhật giao diện tab
+    document.querySelectorAll('.route-tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', i === newIdx);
+    });
+
+    const isRet = currentOptData.return_to_depot !== false;
+
+    // Cập nhật lại style của từng polyline trên bản đồ
+    allAlternativePolylines.forEach((lines, altIdx) => {
+        const isCurrentActive = (altIdx === activeAlternativeIdx);
+        const style = ROUTE_STYLES[altIdx] || { activeColor: '#6c63ff', inactiveColor: '#94a3b8' };
+
+        lines.forEach((line, lineIdx) => {
+            const isReturn = isRet && (lineIdx === lines.length - 1);
+            if (isCurrentActive) {
+                line.setStyle({
+                    color: isReturn ? '#6c63ff' : style.activeColor,
+                    weight: 6,
+                    opacity: 0.92,
+                    dashArray: isReturn ? '10,8' : null
+                });
+                line.bringToFront();
+            } else {
+                line.setStyle({
+                    color: style.inactiveColor,
+                    weight: 4,
+                    opacity: 0.35,
+                    dashArray: '6,6'
+                });
+            }
+        });
+    });
+
+    // Cập nhật stats & steps cho route mới
+    const selectedAlt = currentAlternatives[newIdx];
+    updateStatsForAlternative(selectedAlt);
+}
+
+function updateStatsForAlternative(alt) {
+    const s = currentOptData.stats;
+    const isRet = currentOptData.return_to_depot !== false;
+
+    // Cập nhật bảng stats
+    document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Quãng đường</div><div class="stat-value">${alt.total_distance_km.toFixed(1)}<span class="stat-unit">km</span></div></div>
+        <div class="stat-card"><div class="stat-label">Thời gian dự kiến</div><div class="stat-value">${alt.total_time_min.toFixed(0)}<span class="stat-unit">phút</span></div></div>
+        <div class="stat-card highlight"><div class="stat-label">Tiết kiệm</div><div class="stat-value">${s.time_saved_pct.toFixed(0)}<span class="stat-unit">%</span></div></div>
+        <div class="stat-card"><div class="stat-label">🚦 Đèn giao thông</div><div class="stat-value">${alt.traffic_lights}<span class="stat-unit">đèn</span></div></div>
+        <div class="stat-card"><div class="stat-label">Tốc độ TB</div><div class="stat-value">${s.vehicle_speed_kmh}<span class="stat-unit">km/h</span></div></div>
+    `;
+
+    // Cập nhật route steps
+    document.getElementById('routeSteps').innerHTML = `
+        <div class="section-title" style="margin-top:12px;margin-bottom:8px;">🗺️ Chi tiết Lộ trình (${alt.tag})</div>
+        ${alt.route.map((stop, idx) => {
+            const isS = idx === 0, isE = isRet && idx === alt.route.length - 1, isD = isS || isE;
+            const lbl = isS ? 'XUẤT PHÁT' : isE ? 'VỀ KHO' : `#${idx}`;
+            const meta = stop.time_min ? `${stop.distance_km?.toFixed(1)||0} km • ${stop.time_min?.toFixed(1)||0} phút${stop.traffic_lights ? ' • 🚦' + stop.traffic_lights + ' đèn' : ''}` : '';
+            return `<div class="route-step"><div class="step-num ${isD?'depot':'stop'}">${isD?'🏭':idx}</div><div class="step-info"><div><strong>${lbl}:</strong> ${stop.name}</div><div class="step-meta">${meta}</div></div></div>`;
+        }).join('')}
+    `;
+}
+
+function renderAnalysis(data) {
+    const panel = document.getElementById('analysisPanel');
+    const s = data.stats, w = data.warnings;
+
+    // Render Alternative Tabs
+    const tabsCont = document.getElementById('routeTabsContainer');
+    const tabsEl = document.getElementById('routeTabs');
+
+    if (currentAlternatives && currentAlternatives.length > 0) {
+        tabsCont.style.display = 'block';
+        tabsEl.innerHTML = currentAlternatives.map((alt, i) => `
+            <button class="route-tab-btn ${i === 0 ? 'active' : ''}" onclick="switchAlternativeRoute(${i})">
+                <div class="tag-name">${alt.tag}</div>
+                <div class="tag-stats">⏱️ ${alt.total_time_min.toFixed(0)}p • 📏 ${alt.total_distance_km.toFixed(1)}km • 🚦 ${alt.traffic_lights} đèn</div>
+            </button>
+        `).join('');
+    } else {
+        tabsCont.style.display = 'none';
+    }
+
+    // Warnings
+    const wc = document.getElementById('warningsContainer');
+    if (w && w.length > 0) {
+        wc.innerHTML = `<div class="section-title" style="margin-bottom:6px;">⚠️ Cảnh báo giao thông & thời tiết</div><div class="warnings">${w.map(wi => `<div class="warning-item ${wi.severity}"><span class="icon">${wi.type==='weather'?'🌧️':wi.type==='event'?'🎆':'🚗'}</span><span>${wi.message}</span></div>`).join('')}</div>`;
+    } else {
+        wc.innerHTML = `<div class="warning-item" style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;"><span class="icon">✅</span><span>Tuyến đường lưu thông thuận lợi!</span></div>`;
+    }
+
+    // Active Alternative initial view
+    updateStatsForAlternative(currentAlternatives[0]);
+
+    // Trip Control Setup
+    document.getElementById('tripControl').style.display = 'flex';
+    document.getElementById('tripStatus').innerHTML = `📋 Chuyến #${currentTripId} — Sẵn sàng khởi hành`;
+    document.getElementById('tripStartBtn').textContent = '🚀 Khởi hành';
+    document.getElementById('tripStartBtn').onclick = startTrip;
+    document.getElementById('tripManualForm').classList.remove('visible');
+
+    panel.classList.add('visible');
+    panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════
+// TRIP MANAGEMENT & AI LEARNING
+// ═══════════════════════════════════════
+async function startTrip() {
+    if (!currentTripId) return;
+    try {
+        await fetch(`/api/trips/${currentTripId}/start`, { method: 'POST' });
+        document.getElementById('tripStatus').innerHTML = `⏱️ Đang giao hàng... (Chuyến #${currentTripId})`;
+        const btn = document.getElementById('tripStartBtn');
+        btn.textContent = '🏁 Hoàn thành chuyến';
+        btn.onclick = endTrip;
+    } catch (e) { console.error(e); }
+}
+
+async function endTrip() {
+    if (!currentTripId) return;
+    try {
+        const resp = await fetch(`/api/trips/${currentTripId}/complete`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const t = data.trip, ai = data.ai_learning;
+            document.getElementById('tripStatus').innerHTML = `✅ Hoàn thành! Thực tế: ${t.actual_time_min?.toFixed(1)||'?'} phút<br>${ai.learned ? `<span class="ai-badge">🤖 AI đã học: ${ai.interpretation}</span>` : ''}`;
+            document.getElementById('tripStartBtn').style.display = 'none';
+        }
+    } catch (e) { console.error(e); }
+}
+
+function toggleManualForm() {
+    document.getElementById('tripManualForm').classList.toggle('visible');
+}
+
+async function submitManualTime() {
+    if (!currentTripId) return;
+    const dep = document.getElementById('manualDeparture').value;
+    const arr = document.getElementById('manualArrival').value;
+    try {
+        const resp = await fetch(`/api/trips/${currentTripId}/manual-time`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ departure_time: dep, arrival_time: arr })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const t = data.trip, ai = data.ai_learning;
+            document.getElementById('tripStatus').innerHTML = `✅ Đã lưu test: ${t.actual_time_min?.toFixed(1)} phút (${dep} → ${arr})<br>${ai.learned ? `<span class="ai-badge">🤖 AI đã cập nhật: ${ai.interpretation}</span>` : ''}`;
+            document.getElementById('tripStartBtn').style.display = 'none';
+            document.getElementById('tripManualForm').classList.remove('visible');
+        } else { alert(data.error); }
+    } catch (e) { console.error(e); }
+}
+
+// ═══════════════════════════════════════
+// VEHICLES
+// ═══════════════════════════════════════
+function openVehicleModal() { document.getElementById('vehicleModal').classList.add('visible'); }
+function closeVehicleModal() { document.getElementById('vehicleModal').classList.remove('visible'); document.getElementById('vehLookupResult').style.display = 'none'; }
+
+async function lookupVehicle() {
+    const name = document.getElementById('vehName').value.trim();
+    if (!name) return;
+    const btn = document.getElementById('vehLookupBtn');
+    btn.textContent = '⏳'; btn.disabled = true;
+    try {
+        const resp = await fetch('/api/vehicles/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+        const data = await resp.json();
+        if (data.success) {
+            const s = data.specs;
+            document.getElementById('vehType').value = s.type || 'xe_may';
+            document.getElementById('vehMaxSpeed').value = s.max_speed_kmh || 60;
+            document.getElementById('vehAvgSpeed').value = s.avg_city_speed_kmh || 25;
+            document.getElementById('vehCapacityKg').value = s.capacity_kg || 0;
+            document.getElementById('vehCapacityCbm').value = s.capacity_cbm || 0;
+            const res = document.getElementById('vehLookupResult');
+            res.style.display = 'block';
+            res.innerHTML = `✅ <strong>${s.vehicle_name}</strong>: ${s.type} (Tốc độ TB: ${s.avg_city_speed_kmh} km/h)`;
+        }
+    } catch (e) { alert('Lỗi tra cứu thông tin xe'); }
+    btn.textContent = '🔍 AI Tra cứu'; btn.disabled = false;
+}
+
+async function saveVehicle() {
+    const body = {
+        name: document.getElementById('vehName').value, type: document.getElementById('vehType').value,
+        max_speed_kmh: parseFloat(document.getElementById('vehMaxSpeed').value),
+        avg_city_speed_kmh: parseFloat(document.getElementById('vehAvgSpeed').value),
+        capacity_kg: parseFloat(document.getElementById('vehCapacityKg').value),
+        capacity_cbm: parseFloat(document.getElementById('vehCapacityCbm').value),
+    };
+    try {
+        await fetch('/api/vehicles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        closeVehicleModal();
+        loadVehicles();
+    } catch (e) { alert('Lỗi lưu phương tiện'); }
+}
+
+async function loadVehicles() {
+    try {
+        const resp = await fetch('/api/vehicles');
+        const data = await resp.json();
+        const sel = document.getElementById('vehicleSelect');
+        sel.innerHTML = '<option value="">Mặc định (Tốc độ TB 36 km/h)</option>';
+        (data.vehicles || []).forEach(v => {
+            sel.innerHTML += `<option value="${v.id}">${v.name} (${v.avg_city_speed_kmh} km/h)</option>`;
+        });
+    } catch (e) { console.error(e); }
+}
+
+// ═══════════════════════════════════════
+// DASHBOARD LOGIC
+// ═══════════════════════════════════════
+function initDashboard() {
+    const sel = document.getElementById('dashboardHourSelect');
+    sel.innerHTML = '';
+    for (let h = 0; h < 24; h++) {
+        const note = h in {7:1,8:1} ? ' (Cao điểm sáng)' : h in {17:1,18:1} ? ' (Cao điểm chiều)' : '';
+        sel.innerHTML += `<option value="${h}">${h.toString().padStart(2,'0')}:00${note}</option>`;
+    }
+    initTrafficMap();
+    loadWeatherForecast();
+    const ch = new Date().getHours();
+    sel.value = ch;
+    loadTrafficAnalytics(ch);
+}
+
+function initTrafficMap() {
+    trafficMap = L.map('trafficMap', { zoomControl: true }).setView([10.778, 106.692], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM | FLEX-VRP', maxZoom: 18 }).addTo(trafficMap);
+}
+
+async function loadWeatherForecast() {
+    try {
+        const r = await fetch('/api/weather-forecast'); const d = await r.json();
+        if (d.success) { renderWeatherKPI(d); renderWeatherChart(d.hourly_24h); }
+    } catch (e) { console.error(e); }
+}
+
+function renderWeatherKPI(d) {
+    const c = d.current;
+    document.getElementById('kpiWeatherTemp').textContent = `${c.temperature}°C`;
+    document.getElementById('kpiWeatherDesc').textContent = c.description;
+    document.getElementById('kpiWeatherBadge').innerHTML = `${c.icon} ${c.description}`;
+    document.getElementById('kpiWeatherDetails').innerHTML = `Cảm giác: <strong>${c.apparent_temperature}°C</strong> • Ẩm: <strong>${c.humidity}%</strong> • Gió: <strong>${c.wind_speed_kmh} km/h</strong><br><strong style="color:var(--accent);">Hệ số thời tiết: x${c.recommended_weather_factor}</strong>`;
+    document.getElementById('kpiWeatherUpdated').innerHTML = `🕒 ${d.last_updated}`;
+}
+
+function renderWeatherChart(hourly) {
+    const ctx = document.getElementById('weather24hChart').getContext('2d');
+    if (chartWeather24h) chartWeather24h.destroy();
+    chartWeather24h = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: hourly.map(h=>h.time), datasets: [
+            { type:'line', label:'Nhiệt độ (°C)', data: hourly.map(h=>h.temperature), borderColor:'#fbbf24', borderWidth:2.5, pointRadius:3, yAxisID:'yT', tension:0.35, fill:false },
+            { type:'bar', label:'Xác suất mưa (%)', data: hourly.map(h=>h.rain_prob), backgroundColor:'rgba(96,165,250,0.45)', borderColor:'#60a5fa', borderWidth:1, borderRadius:4, yAxisID:'yR' }
+        ]},
+        options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{labels:{color:'#8b8fa3',font:{size:11}}},tooltip:{backgroundColor:'#1a1d27',titleColor:'#e4e6f0',bodyColor:'#e4e6f0',borderColor:'#2e3345',borderWidth:1}}, scales:{x:{ticks:{color:'#8b8fa3',maxRotation:0,autoSkip:true,maxTicksLimit:12},grid:{color:'rgba(255,255,255,0.05)'}},yT:{type:'linear',position:'left',ticks:{color:'#fbbf24',callback:v=>v+'°C'},grid:{color:'rgba(255,255,255,0.05)'}},yR:{type:'linear',position:'right',min:0,max:100,ticks:{color:'#60a5fa',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}
+    });
+}
+
+async function loadTrafficAnalytics(h) {
+    try {
+        const r = await fetch(`/api/traffic-analytics?hour=${h}`); const d = await r.json();
+        if (d.success) {
+            currentAnalyticsData = d;
+            renderTrafficKPI(d); renderTraffic24hChart(d.hourly_24h_chart, h);
+            renderTrafficMapRoads(d.all_roads); renderRoadsTable(d.all_roads);
+            document.getElementById('heatmapHourLabel').textContent = d.selected_hour_label;
+        }
+    } catch (e) { console.error(e); }
+}
+
+function onDashboardHourChange(v) { loadTrafficAnalytics(parseInt(v)); }
+
+function renderTrafficKPI(d) {
+    const s = d.summary, cp = (s.average_congestion*100).toFixed(1);
+    document.getElementById('kpiTrafficCongestion').textContent = `${cp}%`;
+    const b = document.getElementById('kpiTrafficBadge');
+    if (s.average_congestion>=0.75) { b.className='kpi-badge badge-green'; b.textContent='🟢 Thoáng'; }
+    else if (s.average_congestion>=0.6) { b.className='kpi-badge badge-yellow'; b.textContent='🟡 Vừa'; }
+    else { b.className='kpi-badge badge-red'; b.textContent='🔴 Kẹt'; }
+    document.getElementById('kpiSpeedDetails').innerHTML = `TB: <strong>${s.average_current_speed} km/h</strong> (Lý tưởng: ${s.average_free_flow_speed} km/h)<br>Suy giảm: <strong style="color:${s.speed_drop_pct>25?'var(--red)':'var(--yellow)'};">-${s.speed_drop_pct}%</strong>`;
+    document.getElementById('kpiTrafficUpdated').innerHTML = `🕒 [${d.selected_hour_label}] ${d.last_updated}`;
+    document.getElementById('kpiHeavyCountBadge').textContent = `${s.heavy_congestion_count} đường kẹt`;
+    document.getElementById('kpiPeakHoursText').textContent = s.peak_hours_text;
+    document.getElementById('kpiRecommendationText').textContent = s.recommendation;
+    document.getElementById('countAllRoads').textContent = s.total_roads;
+    document.getElementById('countHeavyRoads').textContent = s.heavy_congestion_count;
+}
+
+function renderTraffic24hChart(data, selH) {
+    const ctx = document.getElementById('traffic24hChart').getContext('2d');
+    if (chartTraffic24h) chartTraffic24h.destroy();
+    const pr = data.map(h => h.hour===selH?7:h.is_peak?4:2);
+    const pc = data.map(h => h.hour===selH?'#6c63ff':h.is_peak?'#ef4444':'#34d399');
+    chartTraffic24h = new Chart(ctx, {
+        type:'line',
+        data:{labels:data.map(h=>h.label),datasets:[
+            {label:'Thông thoáng (%)',data:data.map(h=>h.congestion_pct),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.12)',borderWidth:2.5,pointRadius:pr,pointBackgroundColor:pc,pointBorderColor:'#fff',pointBorderWidth:1.5,yAxisID:'yC',tension:0.35,fill:true},
+            {label:'Tốc độ (km/h)',data:data.map(h=>h.current_speed),borderColor:'#60a5fa',backgroundColor:'transparent',borderWidth:2,borderDash:[5,5],pointRadius:2,yAxisID:'yS',tension:0.35}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#8b8fa3',font:{size:11}}},tooltip:{backgroundColor:'#1a1d27',titleColor:'#e4e6f0',bodyColor:'#e4e6f0',borderColor:'#2e3345',borderWidth:1}},scales:{x:{ticks:{color:'#8b8fa3',maxRotation:0,autoSkip:true,maxTicksLimit:12},grid:{color:'rgba(255,255,255,0.05)'}},yC:{type:'linear',position:'left',min:50,max:100,ticks:{color:'#34d399',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.05)'}},yS:{type:'linear',position:'right',min:15,max:35,ticks:{color:'#60a5fa',callback:v=>v+' km/h'},grid:{drawOnChartArea:false}}}}
+    });
+}
+
+function renderTrafficMapRoads(roads) {
+    if (!trafficMap) return;
+    Object.values(trafficMapLayers).forEach(l => trafficMap.removeLayer(l)); trafficMapLayers = {};
+    const bounds = [];
+    roads.forEach(r => {
+        let color = '#22c55e', weight = 5;
+        if (r.congestion_ratio<0.6) { color='#ef4444'; weight=7; }
+        else if (r.congestion_ratio<0.75) { color='#f59e0b'; weight=6; }
+        const popup = `<div style="font-family:inherit;min-width:180px;"><strong>${r.name}</strong><br>${r.current_speed} / ${r.free_flow_speed} km/h<br>Mức: ${r.congestion_pct}</div>`;
+        if (r.polyline && r.polyline.length > 1) {
+            const line = L.polyline(r.polyline, { color, weight, opacity:0.88, lineCap:'round', lineJoin:'round' }).addTo(trafficMap);
+            line.bindPopup(popup);
+            line.on('mouseover', function(){this.setStyle({weight:weight+3,opacity:1});this.bringToFront();});
+            line.on('mouseout', function(){if(selectedRoadWayId!==r.way_id)this.setStyle({weight,opacity:0.88});});
+            line.on('click', ()=>focusRoadOnMap(r.way_id,false));
+            trafficMapLayers[r.way_id] = line; r.polyline.forEach(p=>bounds.push(p));
+        } else if (r.lat && r.lon) {
+            const c = L.circleMarker([r.lat,r.lon],{radius:7,fillColor:color,color:'#fff',weight:2,opacity:0.9,fillOpacity:0.85}).addTo(trafficMap);
+            c.bindPopup(popup); c.on('click',()=>focusRoadOnMap(r.way_id,false));
+            trafficMapLayers[r.way_id]=c; bounds.push([r.lat,r.lon]);
+        }
+    });
+    if (bounds.length>0) trafficMap.fitBounds(bounds, {padding:[25,25]});
+}
+
+function focusRoadOnMap(wid, pan=true) {
+    selectedRoadWayId = wid; highlightTableRow(wid);
+    const l = trafficMapLayers[wid];
+    if (l && trafficMap) {
+        if (pan) { if(l.getBounds) trafficMap.fitBounds(l.getBounds(),{maxZoom:16,padding:[60,60]}); else if(l.getLatLng) trafficMap.setView(l.getLatLng(),15); }
+        l.openPopup(); if(l.setStyle){l.setStyle({weight:9,opacity:1});l.bringToFront();}
+    }
+}
+
+function highlightTableRow(wid) {
+    document.querySelectorAll('.roads-table tr').forEach(r=>r.classList.remove('selected-row'));
+    const t = document.getElementById(`road-row-${wid}`);
+    if (t) { t.classList.add('selected-row'); t.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+
+function setRoadTableFilter(f, btn) {
+    activeRoadFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if (currentAnalyticsData) renderRoadsTable(currentAnalyticsData.all_roads);
+}
+
+function onSearchRoad(q) { if (currentAnalyticsData) renderRoadsTable(currentAnalyticsData.all_roads, q); }
+
+function renderRoadsTable(roads, sq='') {
+    const tbody = document.getElementById('roadsTableBody');
+    const q = (sq || document.getElementById('searchRoadInput').value || '').toLowerCase().trim();
+    let f = roads.slice();
+    if (activeRoadFilter==='heavy') f = f.filter(r=>r.congestion_ratio<0.6);
+    else if (activeRoadFilter==='smooth') f = f.filter(r=>r.congestion_ratio>=0.75);
+    if (q) f = f.filter(r=>r.name.toLowerCase().includes(q));
+    if (!f.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:20px;">Không tìm thấy tuyến đường nào</td></tr>'; return; }
+    tbody.innerHTML = f.map(r => {
+        let fc = '#34d399'; if (r.congestion_ratio<0.6) fc='#f87171'; else if (r.congestion_ratio<0.75) fc='#fbbf24';
+        const pct = Math.min(100, Math.round(r.congestion_ratio*100));
+        return `<tr id="road-row-${r.way_id}" class="clickable-row ${selectedRoadWayId===r.way_id?'selected-row':''}" onclick="focusRoadOnMap(${r.way_id})"><td class="road-name-cell" title="${r.name}">${r.name}</td><td><strong>${r.current_speed}</strong> <span style="color:var(--text-dim);font-size:0.7rem;">km/h</span></td><td style="color:var(--text-dim);">${r.free_flow_speed} km/h</td><td><div class="progress-bar-container"><div class="progress-bar-fill" style="width:${pct}%;background:${fc};"></div></div><span style="font-weight:600;color:${fc};font-size:0.75rem;">${r.congestion_pct}</span></td></tr>`;
+    }).join('');
+}
+
+// ═══════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════
+initMap();
+loadSavedLocations();
+loadVehicles();
+</script>
+</body>
+</html>

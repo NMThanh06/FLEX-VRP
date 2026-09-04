@@ -22,3 +22,8 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Solver: file tạm, kết quả test, bài giảng (không push lên Git)
+solver/_explore_data.py
+solver/_result.json
+solver/_BAI_GIANG_VRP.md
