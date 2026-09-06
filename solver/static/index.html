@@ -397,6 +397,430 @@
             .sidebar { max-height: none; }
             #map { min-height: 380px; }
         }
+
+        /* ── Phase II B2B Styles ── */
+        .b2b-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px 24px;
+            display: grid;
+            grid-template-columns: 1fr 430px;
+            gap: 22px;
+            min-height: calc(100vh - 61px);
+        }
+        @media (max-width: 1200px) {
+            .b2b-container { grid-template-columns: 1fr; }
+        }
+
+        .b2b-main { display: flex; flex-direction: column; gap: 18px; }
+        .b2b-chat-sidebar {
+            position: sticky;
+            top: 76px;
+            height: calc(100vh - 100px);
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        /* Action Bar */
+        .b2b-action-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 20px;
+        }
+        .b2b-title { font-size: 1.1rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+        .b2b-btn-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .btn-b2b {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn-b2b:hover { background: var(--surface-3); border-color: var(--border-focus); transform: translateY(-1px); }
+        .btn-b2b-primary {
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: #fff;
+            border: none;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+        .btn-b2b-primary:hover {
+            background: linear-gradient(135deg, #7c3aed, var(--accent));
+            box-shadow: 0 6px 20px rgba(108,99,255,0.4);
+            transform: translateY(-2px);
+        }
+        .btn-b2b-seed {
+            background: rgba(52, 211, 153, 0.12);
+            color: var(--green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+        .btn-b2b-seed:hover {
+            background: rgba(52, 211, 153, 0.22);
+        }
+
+        /* Orders Table Card */
+        .b2b-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .b2b-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .b2b-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-2);
+            max-height: 420px;
+        }
+        .b2b-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            text-align: left;
+        }
+        .b2b-table th {
+            background: var(--surface-3);
+            color: var(--text-dim);
+            padding: 10px 14px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            border-bottom: 1px solid var(--border);
+        }
+        .b2b-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .b2b-table tr:hover {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .order-code-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-weight: 700;
+            font-size: 0.8rem;
+            background: rgba(108, 99, 255, 0.15);
+            color: var(--accent-light);
+            border: 1px solid rgba(108, 99, 255, 0.3);
+        }
+        .status-badge-ok {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 20px;
+            font-size: 0.72rem; font-weight: 600;
+            background: rgba(52, 211, 153, 0.15); color: var(--green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+        .status-badge-pending {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 20px;
+            font-size: 0.72rem; font-weight: 600;
+            background: rgba(251, 191, 36, 0.15); color: var(--yellow);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        /* Live Progress Box */
+        .progress-box {
+            background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(139,92,246,0.04));
+            border: 1px solid rgba(108,99,255,0.3);
+            border-radius: var(--radius);
+            padding: 18px 22px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+        .progress-box.visible { display: flex; }
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            background: var(--surface-3);
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--green));
+            border-radius: 5px;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        /* Results KPI Grid */
+        .b2b-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+        @media (max-width: 900px) {
+            .b2b-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .b2b-kpi-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            position: relative;
+            overflow: hidden;
+        }
+        .b2b-kpi-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 3px;
+            background: var(--accent);
+        }
+        .b2b-kpi-card.green::after { background: var(--green); }
+        .b2b-kpi-card.blue::after { background: var(--blue); }
+        .b2b-kpi-card.yellow::after { background: var(--yellow); }
+
+        .b2b-kpi-val { font-size: 1.4rem; font-weight: 700; color: #fff; }
+        .b2b-kpi-lbl { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+        .b2b-kpi-sub { font-size: 0.75rem; color: var(--green); font-weight: 600; }
+
+        /* Sub-tabs for results */
+        .results-subtabs {
+            display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+        }
+        .res-subtab-btn {
+            background: transparent; border: none; color: var(--text-dim);
+            padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: all 0.2s;
+        }
+        .res-subtab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+        .res-subtab-btn.active { color: #fff; background: var(--surface-3); }
+
+        /* Chat Panel Styles */
+        .chat-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chat-engine-badge {
+            font-size: 0.72rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: var(--surface-3);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .chat-engine-badge.active {
+            background: rgba(108, 99, 255, 0.2);
+            color: var(--accent-light);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .chat-bubble {
+            max-width: 92%;
+            padding: 12px 14px;
+            border-radius: 14px;
+            font-size: 0.84rem;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .chat-bubble.bot {
+            align-self: flex-start;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+        .chat-bubble.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+        .chat-quick-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 0 16px 10px 16px;
+        }
+        .chip-btn {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 0.74rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .chip-btn:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            background: var(--surface-3);
+        }
+        .chat-upload-zone {
+            padding: 10px 16px;
+            border-top: 1px dashed var(--border);
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.15);
+            transition: all 0.2s;
+        }
+        .chat-upload-zone:hover {
+            color: var(--accent-light);
+            background: rgba(108, 99, 255, 0.05);
+            cursor: pointer;
+        }
+        .chat-input-row {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            background: var(--surface-2);
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 0.84rem;
+            outline: none;
+            font-family: inherit;
+            resize: none;
+            height: 42px;
+        }
+        .chat-input:focus { border-color: var(--accent); }
+        .chat-send-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s;
+        }
+        .chat-send-btn:hover { transform: scale(1.05); }
+
+        /* Schedule Gantt / Timeline Cards */
+        .schedule-day-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 12px;
+        }
+        .schedule-day-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .trip-item {
+            background: var(--surface-3);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .trip-route-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            color: var(--accent-light);
+        }
+
+        /* Modal Popup for Map / New Order */
+        .b2b-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+        .b2b-modal-overlay.visible { display: flex; }
+        .b2b-modal-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 850px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .b2b-modal-close {
+            position: absolute;
+            top: 18px; right: 18px;
+            background: transparent; border: none; color: var(--text-dim);
+            font-size: 1.2rem; cursor: pointer;
+        }
+        .b2b-modal-close:hover { color: #fff; }
     </style>
 </head>
 <body>
@@ -405,20 +829,324 @@
 <header class="header">
     <div class="header-brand">
         <h1>🚛 FLEX-VRP</h1>
-        <span class="badge">v2.1</span>
+        <span class="badge">v2.5 Hub</span>
     </div>
     <nav class="nav-tabs">
-        <button class="nav-tab active" id="tabOptimizerBtn" onclick="switchTab('optimizer')">
-            <span>🗺️</span> Tối ưu Lộ trình
+        <button class="nav-tab active" id="tabB2BBtn" onclick="switchTab('b2b')">
+            <span>🏢</span> Phân Phối B2B & Chatbot AI
+        </button>
+        <button class="nav-tab" id="tabOptimizerBtn" onclick="switchTab('optimizer')">
+            <span>🗺️</span> Tìm Đường Thủ Công
         </button>
         <button class="nav-tab" id="tabDashboardBtn" onclick="switchTab('dashboard')">
-            <span>📊</span> Dashboard Giao thông
+            <span>📊</span> Dashboard Giao Thông
         </button>
     </nav>
 </header>
 
-<!-- ═══ TAB 1: OPTIMIZER ═══ -->
-<div id="viewOptimizer" class="tab-view active">
+<!-- ═══ TAB 0: B2B ORDERS & AI CHATBOT (PHASE II) ═══ -->
+<div id="viewB2B" class="tab-view active">
+    <div class="b2b-container">
+        <!-- CỘT TRÁI: QUẢN LÝ ĐƠN HÀNG & TỐI ƯU HÓA -->
+        <main class="b2b-main">
+            <!-- Action Bar -->
+            <div class="b2b-action-bar">
+                <div class="b2b-title">
+                    <span>📦 Phân Phối B2B & Tối Ưu Tuyến</span>
+                    <span class="badge" style="background:rgba(52,211,153,0.15);color:var(--green);border-color:rgba(52,211,153,0.3);">Phase II</span>
+                </div>
+                <div class="b2b-btn-group">
+                    <button class="btn-b2b btn-b2b-seed" onclick="seedB2BData()">
+                        <span>🌱</span> Nạp 10 Đơn Mẫu
+                    </button>
+                    <button class="btn-b2b" onclick="openNewOrderModal()">
+                        <span>➕</span> Thêm Đơn Hàng
+                    </button>
+                    <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-dim);background:var(--surface-2);padding:6px 12px;border-radius:8px;border:1px solid var(--border);">
+                        <span>📅 Chu kỳ:</span>
+                        <select id="b2bPlanningDays" style="background:transparent;border:none;color:#fff;font-weight:600;outline:none;cursor:pointer;">
+                            <option value="5" selected>5 ngày (T2-T6)</option>
+                            <option value="3">3 ngày (T2-T4)</option>
+                            <option value="7">7 ngày (Cả tuần)</option>
+                        </select>
+                    </div>
+                    <button class="btn-b2b btn-b2b-primary" id="btnRunB2BOptimize" onclick="runB2BOptimization()">
+                        <span>🚀</span> Chạy Phân Bổ & Tối Ưu
+                    </button>
+                </div>
+            </div>
+
+            <!-- Live Progress Box -->
+            <div class="progress-box" id="b2bProgressBox">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:10px;font-weight:600;font-size:0.9rem;color:var(--accent-light);">
+                        <span class="spinner" style="display:inline-block;width:16px;height:16px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></span>
+                        <span id="b2bProgressStage">Đang chuẩn bị mô hình...</span>
+                    </div>
+                    <span id="b2bProgressPct" style="font-weight:700;color:var(--green);font-size:0.95rem;">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill-bar" id="b2bProgressFill"></div>
+                </div>
+            </div>
+
+            <!-- B2B Orders Card -->
+            <div class="b2b-card">
+                <div class="b2b-card-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-weight:700;font-size:0.92rem;">📋 Danh Sách Đơn Hàng B2B</span>
+                        <span class="badge" id="b2bOrderTotalBadge">0 đơn</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <button class="filter-btn active" id="filterAllOrders" onclick="filterOrders('all', this)">Tất cả</button>
+                        <button class="filter-btn" id="filterConfirmedOrders" onclick="filterOrders('confirmed', this)">✅ Đã xác nhận</button>
+                        <button class="filter-btn" id="filterPendingOrders" onclick="filterOrders('pending', this)">⚠️ Thiếu thông tin</button>
+                    </div>
+                </div>
+
+                <div class="b2b-table-wrap">
+                    <table class="b2b-table">
+                        <thead>
+                            <tr>
+                                <th>Mã Đơn</th>
+                                <th>Khách Hàng</th>
+                                <th>Địa Chỉ Nhận Hàng</th>
+                                <th>Số Lượng</th>
+                                <th>Trọng Lượng</th>
+                                <th>Khung Giờ</th>
+                                <th>Trạng Thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="b2bOrdersTableBody">
+                            <tr>
+                                <td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px;">
+                                    Đang tải danh sách đơn hàng...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Optimization Results Dashboard (Revealed on optimize) -->
+            <div class="b2b-card" id="b2bResultsCard" style="display:none;">
+                <div class="b2b-card-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-weight:700;font-size:0.95rem;color:var(--accent-light);">📊 Kết Quả Tối Ưu Hóa & Lập Lịch</span>
+                        <span class="badge" style="background:rgba(52,211,153,0.2);color:var(--green);border-color:var(--green);">FLEX-VRP Solved</span>
+                    </div>
+                </div>
+
+                <!-- Summary bar ngắn gọn -->
+                <div id="b2bSummaryBar" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:0.82rem;">
+                    <span>📦 <strong id="sumOrders">0</strong> đơn</span>
+                    <span>🚛 <strong id="sumVehicles">0</strong> xe</span>
+                    <span>📏 <strong id="sumKm">0</strong> km</span>
+                    <span>⏱️ <strong id="sumHours">0</strong>h</span>
+                    <span style="color:var(--green);font-weight:600;">💰 Tiết kiệm <strong id="sumSaved">0%</strong></span>
+                </div>
+
+                <!-- 4 KPI Metrics -->
+                <div class="b2b-kpi-grid">
+                    <div class="b2b-kpi-card green">
+                        <span class="b2b-kpi-lbl">Tiết Kiệm Chi Phí</span>
+                        <div class="b2b-kpi-val" id="kpiSavedPct">-0%</div>
+                        <div class="b2b-kpi-sub" id="kpiSavedCost">0 đ</div>
+                    </div>
+                    <div class="b2b-kpi-card blue">
+                        <span class="b2b-kpi-lbl">Cắt Giảm Quãng Đường</span>
+                        <div class="b2b-kpi-val" id="kpiSavedKm">-0 km</div>
+                        <div class="b2b-kpi-sub" id="kpiOptKm">Tối ưu: 0 km</div>
+                    </div>
+                    <div class="b2b-kpi-card yellow">
+                        <span class="b2b-kpi-lbl">Lượt Giao / Đội Xe</span>
+                        <div class="b2b-kpi-val" id="kpiDeliveries">0 lần</div>
+                        <div class="b2b-kpi-sub" id="kpiVehiclesUsed">0 xe tham gia</div>
+                    </div>
+                    <div class="b2b-kpi-card">
+                        <span class="b2b-kpi-lbl">Thời Gian Tiết Kiệm</span>
+                        <div class="b2b-kpi-val" id="kpiSavedHours">-0 giờ</div>
+                        <div class="b2b-kpi-sub" id="kpiTotalTime">Lộ trình: 0h</div>
+                    </div>
+                </div>
+
+                <!-- Sub-view tabs -->
+                <div class="results-subtabs">
+                    <button class="res-subtab-btn active" onclick="switchResultTab('schedule', this)">📅 Lịch Điều Phối Xe</button>
+                    <button class="res-subtab-btn" onclick="switchResultTab('kpis', this)">📈 Đối Sánh Chi Phí</button>
+                    <button class="res-subtab-btn" onclick="switchResultTab('split', this)">✂️ Phân Chia Đơn (Dinic)</button>
+                </div>
+
+                <!-- Sub-view 1: Comparison Table -->
+                <div id="resViewKpis" class="res-content-view">
+                    <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
+                        Đối sánh trực diện hiệu quả vận hành giữa phương án giao thủ công (từng chuyến đơn lẻ) và thuật toán lai FLEX-VRP:
+                    </div>
+                    <div class="b2b-table-wrap">
+                        <table class="b2b-table">
+                            <thead>
+                                <tr>
+                                    <th>Chỉ Số Đánh Giá</th>
+                                    <th style="color:var(--text-dim);">Phương Án Thủ Công</th>
+                                    <th style="color:var(--accent-light);">Tối Ưu FLEX-VRP</th>
+                                    <th style="color:var(--green);">Chênh Lệch Tiết Kiệm</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comparisonTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-view 2: Dinic Split Delivery Table -->
+                <div id="resViewSplit" class="res-content-view" style="display:none;">
+                    <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
+                        Thuật toán <strong>Dinic's Flow</strong> tự động phát hiện các đơn hàng vượt tải trọng xe để chia nhỏ thành nhiều đợt và gom các đơn nhỏ cùng tuyến:
+                    </div>
+                    <div class="b2b-table-wrap">
+                        <table class="b2b-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã Đơn</th>
+                                    <th>Khách Hàng</th>
+                                    <th>Hình Thức</th>
+                                    <th>Số Lần Giao</th>
+                                    <th>Kế Hoạch Phân Bổ Chi Tiết</th>
+                                </tr>
+                            </thead>
+                            <tbody id="splitDeliveryTableBody">
+                                <!-- Populated dynamically -->
+                <!-- Sub-view 3: Multi-Day Schedule -->
+                <div id="resViewSchedule" class="res-content-view" style="display:none;">
+                    <div id="scheduleTimelineContainer">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- CỘT PHẢI: TRỢ LÝ CHATBOT AI CỐ ĐỊNH -->
+        <aside class="b2b-chat-sidebar">
+            <div class="chat-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:1.1rem;">🤖</span>
+                    <div>
+                        <div style="font-weight:700;font-size:0.88rem;color:var(--text);">Trợ Lý AI Logistics</div>
+                        <div style="font-size:0.7rem;color:var(--green);display:flex;align-items:center;gap:4px;">
+                            <span style="width:6px;height:6px;background:var(--green);border-radius:50%;display:inline-block;"></span>
+                <div style="display:flex;align-items:center;gap:4px;">
+                    <button class="chat-engine-badge active" id="engineGeminiBtn" onclick="setChatEngine('gemini')" title="Dùng Google Gemini 3.6 Flash">⚡ Gemini</button>
+                    <button class="chat-engine-badge" id="engineRouterBtn" onclick="setChatEngine('openrouter')" title="Dùng OpenRouter (Claude, Llama)">🌐 Router</button>
+                </div>
+            </div>
+
+            <!-- Messages Stream -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-bubble bot">
+                    👋 <strong>Xin chào!</strong> Tôi là Trợ lý AI Điều phối Logistics B2B. Tôi có thể giúp bạn:
+                    <ul style="margin:6px 0 0 16px;line-height:1.4;">
+                        <li>Nhập đơn tự nhiên (VD: <em>"Tạo đơn cho tiệm Cô Ba 80 thùng sữa tại Q3"</em>)</li>
+                        <li>Tra cứu đơn hàng bằng mã 6 ký tự (VD: <em>"LN1669"</em>)</li>
+                        <li>Đọc danh sách đơn từ file Excel/CSV</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Quick Suggestion Chips -->
+            <div class="chat-quick-chips">
+                <button class="chip-btn" onclick="sendQuickPrompt('Tạo đơn cho tiệm Cô Lan 60 thùng mì Hảo Hảo tại Quận 1')">💡 Tạo đơn 60 thùng Q1</button>
+                <button class="chip-btn" onclick="sendQuickPrompt('Tra cứu đơn LN1669')">💡 Tra cứu LN1669</button>
+                <button class="chip-btn" onclick="sendQuickPrompt('Kiểm tra lịch xe chạy')">💡 Lịch điều phối</button>
+            </div>
+
+            <!-- File Upload Bar -->
+            <label class="chat-upload-zone" for="chatFileInput">
+                <span>📎 Tải file đơn hàng (.csv, .xlsx, .txt)</span>
+                <span style="font-size:0.68rem;opacity:0.7;">AI tự đọc</span>
+                <input type="file" id="chatFileInput" accept=".csv,.txt,.xlsx,.json" style="display:none;" onchange="uploadChatFile(this)">
+            </label>
+
+            <!-- Chat Input -->
+            <div class="chat-input-row">
+                <textarea class="chat-input" id="chatInput" placeholder="Nhập yêu cầu tạo đơn, tra cứu..." rows="1" onkeydown="onChatInputKey(event)"></textarea>
+                <button class="chat-send-btn" onclick="sendChatMessage()" title="Gửi tin nhắn">➤</button>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<!-- Modal Xem Chi Tiết Lộ Trình Chuyến Xe -->
+<div class="b2b-modal-overlay" id="tripDetailModal">
+    <div class="b2b-modal-content">
+        <button class="b2b-modal-close" onclick="closeTripModal()">✕</button>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <span style="font-size:1.2rem;">🗺️</span>
+            <div>
+                <h3 id="modalTripTitle" style="font-size:1.05rem;font-weight:700;">Chi Tiết Lộ Trình Xe</h3>
+                <div id="modalTripSubtitle" style="font-size:0.75rem;color:var(--text-dim);"></div>
+            </div>
+        </div>
+        <div id="tripDetailMap" style="width:100%;height:380px;border-radius:10px;border:1px solid var(--border);margin-bottom:14px;"></div>
+        <div class="b2b-table-wrap">
+            <table class="b2b-table">
+                <thead>
+                    <tr>
+                        <th>Trạm</th>
+                        <th>Địa Điểm / Khách Hàng</th>
+                        <th>Thời Gian Dự Kiến</th>
+                        <th>Hàng Hóa Giao</th>
+                    </tr>
+                </thead>
+                <tbody id="modalTripStopsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Đơn Hàng Mới Thủ Công -->
+<div class="b2b-modal-overlay" id="newOrderModal">
+    <div class="b2b-modal-content" style="max-width:550px;">
+        <button class="b2b-modal-close" onclick="closeNewOrderModal()">✕</button>
+        <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:16px;">➕ Thêm Đơn Hàng B2B Mới</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+            <div>
+                <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Tên Khách Hàng / Tiệm</label>
+                <input type="text" id="moCustName" class="search-box" style="width:100%;padding:8px 12px;" placeholder="VD: Tạp hóa Hưng Phát">
+            </div>
+            <div>
+                <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Địa Chỉ Giao Hàng</label>
+                <input type="text" id="moCustAddr" class="search-box" style="width:100%;padding:8px 12px;" placeholder="VD: 150 Lê Lợi, Quận 1, HCM">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                    <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Số lượng (thùng)</label>
+                    <input type="number" id="moQty" class="search-box" style="width:100%;padding:8px 12px;" value="50">
+                </div>
+                <div>
+                    <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Tổng trọng lượng (kg)</label>
+                    <input type="number" id="moWeight" class="search-box" style="width:100%;padding:8px 12px;" value="250">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div>
+                    <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Giờ bắt đầu</label>
+                    <input type="time" id="moTimeStart" class="search-box" style="width:100%;padding:8px 12px;" value="08:00">
+                </div>
+                <div>
+                    <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Giờ kết thúc</label>
+                    <input type="time" id="moTimeEnd" class="search-box" style="width:100%;padding:8px 12px;" value="17:00">
+                </div>
+            </div>
+            <button class="btn-b2b btn-b2b-primary" style="margin-top:10px;justify-content:center;" onclick="saveManualNewOrder()">
+                <span>💾</span> Lưu Đơn Hàng
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ TAB 1: OPTIMIZER (PHASE I — TÌM ĐƯỜNG THỦ CÔNG) ═══ -->
+<div id="viewOptimizer" class="tab-view">
     <div class="optimizer-layout">
         <aside class="sidebar">
 
@@ -703,12 +1431,28 @@ let chartTraffic24h = null, chartWeather24h = null;
 let currentAnalyticsData = null, activeRoadFilter = 'all', dashboardInitialized = false;
 
 // ═══════════════════════════════════════
+// PHASE II: B2B ORDERS & AI CHATBOT STATE
+// ═══════════════════════════════════════
+let b2bInitialized = false;
+let currentB2BOrders = [];
+let currentB2BFilter = 'all';
+let currentChatEngine = 'gemini';
+let b2bOptimizePollInterval = null;
+let currentB2BResult = null;
+let tripDetailLeafletMap = null;
+let tripDetailRouteLayer = null;
+
+// ═══════════════════════════════════════
 // TAB SWITCHER
 // ═══════════════════════════════════════
 function switchTab(name) {
     document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
-    if (name === 'optimizer') {
+    if (name === 'b2b') {
+        document.getElementById('tabB2BBtn').classList.add('active');
+        document.getElementById('viewB2B').classList.add('active');
+        if (!b2bInitialized) { initB2B(); b2bInitialized = true; }
+    } else if (name === 'optimizer') {
         document.getElementById('tabOptimizerBtn').classList.add('active');
         document.getElementById('viewOptimizer').classList.add('active');
         if (map) setTimeout(() => map.invalidateSize(), 200);
@@ -718,6 +1462,672 @@ function switchTab(name) {
         if (!dashboardInitialized) { initDashboard(); dashboardInitialized = true; }
         else if (trafficMap) setTimeout(() => trafficMap.invalidateSize(), 200);
     }
+}
+
+// ── B2B Initialization & Orders ──
+async function initB2B() {
+    await loadB2BOrders();
+    // Auto-seed if empty
+    if (!currentB2BOrders || currentB2BOrders.length === 0) {
+        console.log('[B2B] Initial empty orders, auto-seeding B2B demo data...');
+        await seedB2BData();
+    }
+}
+
+async function loadB2BOrders() {
+    try {
+        const resp = await fetch('/api/b2b/orders');
+        const data = await resp.json();
+        if (data.success) {
+            currentB2BOrders = data.orders || [];
+            renderB2BOrdersTable();
+        }
+    } catch (e) {
+        console.error('[B2B] Load orders error:', e);
+    }
+}
+
+function filterOrders(status, btn) {
+    currentB2BFilter = status;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    renderB2BOrdersTable();
+}
+
+function renderB2BOrdersTable() {
+    const tbody = document.getElementById('b2bOrdersTableBody');
+    const badge = document.getElementById('b2bOrderTotalBadge');
+    if (!tbody) return;
+
+    let list = currentB2BOrders.slice();
+    if (currentB2BFilter === 'confirmed') list = list.filter(o => o.status === 'confirmed');
+    else if (currentB2BFilter === 'pending') list = list.filter(o => o.status === 'pending');
+
+    badge.textContent = `${currentB2BOrders.length} đơn`;
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:30px;">
+            Chưa có đơn hàng nào. Hãy bấm <strong>[🌱 Nạp 10 Đơn Mẫu]</strong> hoặc nhắn tin cho Chatbot AI để tạo đơn!
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = list.map(o => {
+        const isOk = o.status === 'confirmed';
+        const stBadge = isOk 
+            ? `<span class="status-badge-ok">✅ Đã xác nhận</span>`
+            : `<span class="status-badge-pending">⚠️ Thiếu thông tin</span>`;
+        const tw = (o.time_window_start && o.time_window_end) ? `${o.time_window_start} - ${o.time_window_end}` : 'Cả ngày';
+        return `
+            <tr>
+                <td><span class="order-code-badge">${o.order_code}</span></td>
+                <td><strong>${o.customer_name || 'Khách vãng lai'}</strong></td>
+                <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${o.customer_address || ''}">${o.customer_address || 'TP. Hồ Chí Minh'}</td>
+                <td><strong>${o.total_quantity || 0}</strong> <span style="font-size:0.7rem;color:var(--text-dim);">thùng</span></td>
+                <td>${(o.total_weight_kg || 0).toFixed(1)} kg</td>
+                <td><span style="font-size:0.75rem;color:var(--text-dim);">${tw}</span></td>
+                <td>${stBadge}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function seedB2BData() {
+    try {
+        const resp = await fetch('/api/b2b/seed', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            currentB2BOrders = data.orders || [];
+            renderB2BOrdersTable();
+            addBotChatMessage(`🌱 **Đã nạp thành công bộ dữ liệu mẫu B2B!** Bao gồm 1 kho Q7, 6 tiệm tạp hóa, 3 xe tải và 10 đơn hàng (có đơn to cần tách và đơn nhỏ gom chung).`);
+        }
+    } catch (e) {
+        alert('Lỗi nạp dữ liệu mẫu B2B');
+    }
+}
+
+// ── Manual New Order Modal ──
+function openNewOrderModal() {
+    document.getElementById('newOrderModal').classList.add('visible');
+}
+function closeNewOrderModal() {
+    document.getElementById('newOrderModal').classList.remove('visible');
+}
+async function saveManualNewOrder() {
+    const name = document.getElementById('moCustName').value.trim();
+    const addr = document.getElementById('moCustAddr').value.trim();
+    const qty = parseInt(document.getElementById('moQty').value) || 50;
+    const wt = parseFloat(document.getElementById('moWeight').value) || 250;
+    const tStart = document.getElementById('moTimeStart').value || '08:00';
+    const tEnd = document.getElementById('moTimeEnd').value || '17:00';
+
+    if (!name || !addr) {
+        alert('Vui lòng nhập tên khách hàng và địa chỉ.');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/b2b/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                customer_name: name,
+                customer_address: addr,
+                total_quantity: qty,
+                total_weight_kg: wt,
+                time_window_start: tStart,
+                time_window_end: tEnd
+            })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            closeNewOrderModal();
+            await loadB2BOrders();
+            addBotChatMessage(`🎉 **Đã lưu đơn hàng \`${data.order.order_code}\`** cho khách **${name}** (${qty} thùng)!`);
+        }
+    } catch (e) {
+        alert('Lỗi lưu đơn hàng');
+    }
+}
+
+// ── Optimization Pipeline Execution ──
+async function runB2BOptimization() {
+    const btn = document.getElementById('btnRunB2BOptimize');
+    const pBox = document.getElementById('b2bProgressBox');
+    const stageEl = document.getElementById('b2bProgressStage');
+    const pctEl = document.getElementById('b2bProgressPct');
+    const fillEl = document.getElementById('b2bProgressFill');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Đang tối ưu...';
+    pBox.classList.add('visible');
+    pctEl.textContent = '5%';
+    fillEl.style.width = '5%';
+    stageEl.textContent = 'Khởi động mô hình...';
+
+    const days = parseInt(document.getElementById('b2bPlanningDays').value) || 5;
+
+    try {
+        const resp = await fetch('/api/b2b/optimize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planning_days: days })
+        });
+        const data = await resp.json();
+        if (!data.success) {
+            alert('Lỗi khởi động: ' + (data.error || ''));
+            resetOptimizeUI();
+            return;
+        }
+
+        const runId = data.run_id;
+        // Animated Progress State
+        let displayPct = 5;
+        let targetPct = 5;
+        let lastServerPct = 5;
+        let creepTimer = null;
+        let rafId = null;
+
+        // Lerp animation: smoothly animate displayPct towards targetPct
+        function animateProgress() {
+            const diff = targetPct - displayPct;
+            if (Math.abs(diff) > 0.1) {
+                displayPct += diff * 0.08; // Ease towards target
+            } else {
+                displayPct = targetPct;
+            }
+            const rounded = Math.round(displayPct);
+            pctEl.textContent = `${rounded}%`;
+            fillEl.style.width = `${displayPct}%`;
+            if (displayPct < targetPct || targetPct < 100) {
+                rafId = requestAnimationFrame(animateProgress);
+            }
+        }
+
+        // Fake sub-progress: creep +0.3% every 400ms between server updates
+        function startCreep() {
+            if (creepTimer) clearInterval(creepTimer);
+            creepTimer = setInterval(() => {
+                // Creep slowly, never exceed server value + 3%, max 95%
+                const maxCreep = Math.min(lastServerPct + 3, 95);
+                if (targetPct < maxCreep) {
+                    targetPct = Math.min(targetPct + 0.3, maxCreep);
+                }
+            }, 400);
+        }
+
+        function stopCreep() {
+            if (creepTimer) { clearInterval(creepTimer); creepTimer = null; }
+            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        }
+
+        // Start animation loop and creep
+        rafId = requestAnimationFrame(animateProgress);
+        startCreep();
+
+        // Poll status
+        if (b2bOptimizePollInterval) clearInterval(b2bOptimizePollInterval);
+        b2bOptimizePollInterval = setInterval(async () => {
+            try {
+                const sResp = await fetch(`/api/b2b/optimize-status/${runId}`);
+                const sData = await sResp.json();
+                if (sData.success && sData.run) {
+                    const r = sData.run;
+                    const serverPct = Math.max(5, r.progress_pct || 0);
+                    lastServerPct = serverPct;
+                    // Set target — lerp will animate smoothly towards it
+                    targetPct = serverPct;
+                    if (r.current_stage) stageEl.textContent = r.current_stage;
+
+                    if (r.status === 'completed') {
+                        clearInterval(b2bOptimizePollInterval);
+                        stopCreep();
+                        targetPct = 100;
+                        displayPct = 100;
+                        pctEl.textContent = '100%';
+                        fillEl.style.width = '100%';
+
+                        const resResp = await fetch(`/api/b2b/optimize-result/${runId}`);
+                        const resJson = await resResp.json();
+                        if (resJson.success && resJson.result) {
+                            currentB2BResult = resJson.result;
+                            renderB2BResults(resJson.result);
+                        }
+                        setTimeout(() => {
+                            pBox.classList.remove('visible');
+                            resetOptimizeUI();
+                        }, 800);
+                    } else if (r.status === 'failed') {
+                        clearInterval(b2bOptimizePollInterval);
+                        stopCreep();
+                        alert('Tối ưu hóa thất bại: ' + (r.error_message || ''));
+                        resetOptimizeUI();
+                    }
+                }
+            } catch (err) {
+                console.error('Poll error:', err);
+            }
+        }, 600);
+    } catch (e) {
+        alert('Lỗi kết nối server');
+        resetOptimizeUI();
+    }
+}
+
+function resetOptimizeUI() {
+    const btn = document.getElementById('btnRunB2BOptimize');
+    btn.disabled = false;
+    btn.innerHTML = '<span>🚀</span> Chạy Phân Bổ & Tối Ưu';
+}
+
+function switchResultTab(tabName, btn) {
+    document.querySelectorAll('.res-subtab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.res-content-view').forEach(v => v.style.display = 'none');
+    if (btn) btn.classList.add('active');
+
+    if (tabName === 'kpis') { document.getElementById('resViewKpis').style.display = 'block'; document.querySelector('.b2b-kpi-grid').style.display = 'grid'; }
+    else if (tabName === 'split') { document.getElementById('resViewSplit').style.display = 'block'; document.querySelector('.b2b-kpi-grid').style.display = 'none'; }
+    else if (tabName === 'schedule') { document.getElementById('resViewSchedule').style.display = 'block'; document.querySelector('.b2b-kpi-grid').style.display = 'none'; }
+}
+
+function renderB2BResults(res) {
+    document.getElementById('b2bResultsCard').style.display = 'flex';
+
+    // 1. KPI Cards
+    const kpis = res.kpis || {};
+    const comp = res.comparison || {};
+    document.getElementById('kpiSavedPct').textContent = `-${kpis.saved_percentage || 0}%`;
+    document.getElementById('kpiSavedCost').textContent = `Tiết kiệm: ${(kpis.saved_cost_vnd || 0).toLocaleString()} đ`;
+    document.getElementById('kpiSavedKm').textContent = `-${kpis.saved_distance_km || 0} km`;
+    document.getElementById('kpiOptKm').textContent = `Tổng lộ trình: ${kpis.total_distance_km || 0} km`;
+    document.getElementById('kpiDeliveries').textContent = `${kpis.total_deliveries || 0} lần giao`;
+    document.getElementById('kpiVehiclesUsed').textContent = `${kpis.vehicles_used || 0} xe tải điều động`;
+    document.getElementById('kpiSavedHours').textContent = `-${kpis.saved_time_hours || 0} giờ`;
+    document.getElementById('kpiTotalTime').textContent = `Tổng thời gian: ${kpis.total_time_hours || 0}h`;
+
+    // Summary bar ngắn gọn (luôn hiện)
+    document.getElementById('sumOrders').textContent = kpis.total_orders || 0;
+    document.getElementById('sumVehicles').textContent = kpis.vehicles_used || 0;
+    document.getElementById('sumKm').textContent = kpis.total_distance_km || 0;
+    document.getElementById('sumHours').textContent = kpis.total_time_hours || 0;
+    document.getElementById('sumSaved').textContent = `${kpis.saved_percentage || 0}%`;
+
+    // 2. Comparison Table
+    const naive = comp.naive || {};
+    const opt = comp.optimized || {};
+    const sav = comp.savings || {};
+    document.getElementById('comparisonTableBody').innerHTML = `
+        <tr>
+            <td><strong>Tổng Quãng Đường Vận Chuyển</strong></td>
+            <td>${naive.distance_km || 0} km</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.distance_km || 0} km</td>
+            <td style="color:var(--green);font-weight:700;">-${sav.km || 0} km (${sav.pct || 0}%)</td>
+        </tr>
+        <tr>
+            <td><strong>Thời Gian Xe Lăn Bánh Trên Đường</strong></td>
+            <td>${naive.time_hours || 0} giờ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.time_hours || 0} giờ</td>
+            <td style="color:var(--green);font-weight:700;">-${sav.hours || 0} giờ</td>
+        </tr>
+        <tr>
+            <td><strong>Ước Tính Nhiên Liệu & Khấu Hao</strong></td>
+            <td>${(naive.cost_vnd || 0).toLocaleString()} đ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${(opt.cost_vnd || 0).toLocaleString()} đ</td>
+            <td style="color:var(--green);font-weight:700;">-${(sav.cost_vnd || 0).toLocaleString()} đ</td>
+        </tr>
+        <tr>
+            <td><strong>Số Lượt Chuyến Xuất Bến</strong></td>
+            <td>${naive.trips || 0} chuyến đơn lẻ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.trips || 0} tuyến gom liên hoàn</td>
+            <td style="color:var(--green);font-weight:700;">Tiết kiệm ${Math.max(0, (naive.trips||0) - (opt.trips||0))} chuyến xe</td>
+        </tr>
+    `;
+
+    // 3. Dinic Split Delivery Table
+    const splits = res.split_delivery || [];
+    document.getElementById('splitDeliveryTableBody').innerHTML = splits.map(s => {
+        const typeBadge = s.is_split
+            ? `<span style="background:rgba(108,99,255,0.2);color:var(--accent-light);padding:3px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">✂️ Tách ${s.split_count} đợt</span>`
+            : `<span style="background:rgba(52,211,153,0.15);color:var(--green);padding:3px 8px;border-radius:4px;font-size:0.75rem;">1 lần</span>`;
+
+        const details = (s.deliveries || []).map(d => 
+            `<div style="font-size:0.75rem;margin-top:2px;">• <strong>${d.date}</strong> | ${d.vehicle}: <strong>${d.quantity} thùng</strong> (${d.weight_kg} kg)</div>`
+        ).join('');
+
+        return `
+            <tr>
+                <td><span class="order-code-badge">${s.order_code}</span></td>
+                <td><strong>${s.customer_name}</strong></td>
+                <td>${typeBadge}</td>
+                <td>${s.split_count} lần</td>
+                <td>${details}</td>
+            </tr>
+        `;
+    }).join('');
+
+    // 4. Schedule Gantt / Timeline
+    const schedule = res.schedule || [];
+    const schedCont = document.getElementById('scheduleTimelineContainer');
+    schedCont.innerHTML = schedule.map((day, dIdx) => {
+        if (!day.routes || day.routes.length === 0) {
+            return `
+                <div class="schedule-day-card">
+                    <div class="schedule-day-header">
+                        <strong>📅 ${day.day_name} (${day.date})</strong>
+                        <span style="font-size:0.75rem;color:var(--text-dim);">Nghỉ giao / Không có chuyến</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        const tripsHtml = day.routes.map((rt, rIdx) => {
+            const stopsSummary = rt.stops.map(st => st.name).join(' ➔ ');
+            return `
+                <div class="trip-item">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <span class="trip-route-badge">🚛 ${rt.vehicle_name}</span>
+                        <div style="font-size:0.75rem;color:var(--text-dim);display:flex;gap:12px;">
+                            <span>Tải: <strong>${rt.total_load_kg} / ${rt.capacity_kg} kg</strong> (${rt.load_percentage}%)</span>
+                            <span>Cự ly: <strong>${rt.distance_km} km</strong></span>
+                            <span>Chi phí: <strong>${(rt.cost_vnd||0).toLocaleString()} đ</strong></span>
+                        </div>
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--text);line-height:1.4;">
+                        <strong>Hành trình:</strong> ${stopsSummary}
+                    </div>
+                    <div style="text-align:right;">
+                        <button class="btn-b2b" style="padding:4px 10px;font-size:0.72rem;" onclick="viewTripDetailOnMap(${dIdx}, ${rIdx})">
+                            🗺️ Xem Lộ Trình Trên Bản Đồ
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="schedule-day-card">
+                <div class="schedule-day-header">
+                    <div>
+                        <strong style="font-size:0.92rem;color:#fff;">📅 ${day.day_name}</strong>
+                        <span style="font-size:0.75rem;color:var(--text-dim);margin-left:8px;">(${day.date})</span>
+                    </div>
+                    <span class="badge" style="background:rgba(108,99,255,0.15);color:var(--accent-light);">
+                        ${day.total_trips} chuyến • ${day.total_day_dist_km} km • ${day.total_day_load_kg} kg
+                    </span>
+                </div>
+                ${tripsHtml}
+            </div>
+        `;
+    }).join('');
+
+    // Switch to schedule tab by default (khách hàng quan tâm lịch, không cần bảng phân tích)
+    switchResultTab('schedule', document.querySelector('.res-subtab-btn'));
+}
+
+// ── Trip Map Modal ──
+function viewTripDetailOnMap(dayIdx, routeIdx) {
+    if (!currentB2BResult) return;
+    const day = currentB2BResult.schedule[dayIdx];
+    const route = day.routes[routeIdx];
+    if (!route) return;
+
+    document.getElementById('modalTripTitle').textContent = `${route.vehicle_name} — ${day.day_name} (${day.date})`;
+    document.getElementById('modalTripSubtitle').textContent = `Tải trọng: ${route.total_load_kg}/${route.capacity_kg} kg • Quãng đường: ${route.distance_km} km • ${route.stops.length} điểm dừng`;
+
+    const tbody = document.getElementById('modalTripStopsBody');
+    tbody.innerHTML = route.stops.map(s => `
+        <tr>
+            <td><span class="order-code-badge">${s.step}</span></td>
+            <td><strong>${s.name}</strong> ${s.order_code ? `<span style="font-size:0.7rem;color:var(--text-dim);">(${s.order_code})</span>` : ''}</td>
+            <td><span style="color:var(--green);font-weight:600;">${s.eta || '08:00'}</span> ${s.time_window ? `<span style="font-size:0.7rem;color:var(--text-dim);">[${s.time_window}]</span>` : ''}</td>
+            <td>${s.quantity ? `<strong>${s.quantity} thùng</strong> (${s.weight_kg} kg)` : (s.action || 'Trạm kho')}</td>
+        </tr>
+    `).join('');
+
+    document.getElementById('tripDetailModal').classList.add('visible');
+
+    // Render Leaflet Map inside Modal
+    setTimeout(() => {
+        if (!tripDetailLeafletMap) {
+            tripDetailLeafletMap = L.map('tripDetailMap', { zoomControl: true }).setView([10.776, 106.699], 13);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19, attribution: '© CartoDB'
+            }).addTo(tripDetailLeafletMap);
+        } else {
+            tripDetailLeafletMap.invalidateSize();
+        }
+
+        if (tripDetailRouteLayer) {
+            tripDetailRouteLayer.clearLayers();
+        } else {
+            tripDetailRouteLayer = L.layerGroup().addTo(tripDetailLeafletMap);
+        }
+
+        // ── Gọi API lấy đường thực tế (OSRM) + đèn giao thông + congestion ──
+        const waypoints = route.stops.map(st => ({ lat: st.lat, lon: st.lon }));
+
+        // Thêm marker cho mỗi stop trước
+        route.stops.forEach((st, idx) => {
+            const pos = [st.lat, st.lon];
+            const isDepot = st.type === 'depot';
+            const iconHtml = isDepot
+                ? `<div style="background:#10b981;border:3px solid white;border-radius:50%;width:28px;height:28px;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:14px;color:white;">🏭</div>`
+                : `<div style="background:#6c63ff;border:2px solid white;border-radius:50%;width:26px;height:26px;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${st.step}</div>`;
+            const marker = L.marker(pos, {
+                icon: L.divIcon({ className: '', html: iconHtml, iconSize: [28, 28], iconAnchor: [14, 14] })
+            }).addTo(tripDetailRouteLayer);
+            marker.bindPopup(`<strong>${st.step}. ${st.name}</strong><br>ETA: ${st.eta || ''}<br>${st.quantity ? `${st.quantity} thùng (${st.weight_kg} kg)` : (st.action || 'Trạm kho')}`);
+        });
+
+        // Gọi API route-geometry để lấy đường thực tế
+        try {
+            const geoResp = await fetch('/api/route-geometry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ waypoints: waypoints })
+            });
+            const geoData = await geoResp.json();
+
+            if (geoData.success && geoData.segments) {
+                const allBounds = [];
+
+                // Vẽ từng segment với màu congestion
+                geoData.segments.forEach((seg, segIdx) => {
+                    const isReturn = segIdx === geoData.segments.length - 1;
+                    const polyline = L.polyline(seg.geometry, {
+                        color: seg.color,
+                        weight: 6,
+                        opacity: 0.88,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                        dashArray: isReturn ? '10,8' : null
+                    }).addTo(tripDetailRouteLayer);
+
+                    // Tooltip congestion trên mỗi đoạn
+                    const congPct = Math.round(seg.congestion_ratio * 100);
+                    const statusText = seg.status === 'heavy' ? '🔴 Kẹt nặng' : seg.status === 'medium' ? '🟡 Kẹt vừa' : '🟢 Thông thoáng';
+                    polyline.bindTooltip(
+                        `${statusText} (${congPct}%)${seg.distance_km ? ` • ${seg.distance_km} km` : ''}${seg.traffic_light_count ? ` • 🚦${seg.traffic_light_count} đèn` : ''}`,
+                        { sticky: true }
+                    );
+
+                    seg.geometry.forEach(pt => allBounds.push(pt));
+                });
+
+                // Vẽ đèn giao thông trên tuyến
+                if (geoData.all_traffic_lights && geoData.all_traffic_lights.length > 0) {
+                    geoData.all_traffic_lights.forEach(tl => {
+                        const tlMarker = L.marker([tl.lat, tl.lon], {
+                            icon: L.divIcon({
+                                className: '',
+                                html: `<div style="font-size:14px;opacity:0.8;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));">🚦</div>`,
+                                iconSize: [16, 16], iconAnchor: [8, 8]
+                            })
+                        }).addTo(tripDetailRouteLayer);
+                        tlMarker.bindPopup('🚦 <strong>Đèn giao thông</strong><br>Thời gian chờ TB: ~21 giây');
+                    });
+                }
+
+                // Fit bounds
+                if (allBounds.length > 0) {
+                    tripDetailLeafletMap.fitBounds(allBounds, { padding: [40, 40] });
+                }
+            } else {
+                // Fallback: vẽ đường thẳng nếu API fail
+                const latlngs = route.stops.map(st => [st.lat, st.lon]);
+                if (latlngs.length > 1) {
+                    const poly = L.polyline(latlngs, { color: '#6c63ff', weight: 5, opacity: 0.85, dashArray: '8, 6' }).addTo(tripDetailRouteLayer);
+                    tripDetailLeafletMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+                }
+            }
+        } catch (geoErr) {
+            console.error('Route geometry error:', geoErr);
+            // Fallback: đường thẳng
+            const latlngs = route.stops.map(st => [st.lat, st.lon]);
+            if (latlngs.length > 1) {
+                const poly = L.polyline(latlngs, { color: '#6c63ff', weight: 5, opacity: 0.85, dashArray: '8, 6' }).addTo(tripDetailRouteLayer);
+                tripDetailLeafletMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+            }
+        }
+    }, 250);
+}
+
+function closeTripModal() {
+    document.getElementById('tripDetailModal').classList.remove('visible');
+}
+
+// ── Chatbot Functions ──
+// Engine is always 'gemini' (OpenRouter is auto-fallback in backend)
+function setChatEngine(engine) {
+    currentChatEngine = 'gemini';
+}
+
+function sendQuickPrompt(text) {
+    document.getElementById('chatInput').value = text;
+    sendChatMessage();
+}
+
+function onChatInputKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+    }
+}
+
+async function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    addUserChatMessage(msg);
+
+    // Typing indicator
+    const typingId = addTypingIndicator();
+
+    try {
+        const resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: msg,
+                provider: currentChatEngine
+            })
+        });
+        const data = await resp.json();
+        removeTypingIndicator(typingId);
+
+        if (data.reply) {
+            addBotChatMessage(data.reply, data.provider);
+            // If order created, reload table
+            if (data.action === 'order_created') {
+                await loadB2BOrders();
+            }
+        } else {
+            addBotChatMessage('⚠️ Không nhận được phản hồi từ AI Engine.');
+        }
+    } catch (e) {
+        removeTypingIndicator(typingId);
+        addBotChatMessage('⚠️ Lỗi kết nối tới máy chủ Chatbot.');
+    }
+}
+
+function addUserChatMessage(text) {
+    const box = document.getElementById('chatMessages');
+    const b = document.createElement('div');
+    b.className = 'chat-bubble user';
+    b.textContent = text;
+    box.appendChild(b);
+    box.scrollTop = box.scrollHeight;
+}
+
+function addBotChatMessage(markdownText, provider) {
+    const box = document.getElementById('chatMessages');
+    const b = document.createElement('div');
+    b.className = 'chat-bubble bot';
+
+    // Parse simple markdown (bold, bullet, code)
+    let formatted = markdownText
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code style="background:rgba(108,99,255,0.2);padding:2px 5px;border-radius:4px;color:var(--accent-light);">$1</code>')
+        .replace(/\n• /g, '<br>• ')
+        .replace(/\n\n/g, '<br><br>');
+
+    if (provider) {
+        formatted += `<div style="margin-top:6px;font-size:0.65rem;color:var(--text-dim);text-align:right;">⚡ ${provider}</div>`;
+    }
+
+    b.innerHTML = formatted;
+    box.appendChild(b);
+    box.scrollTop = box.scrollHeight;
+}
+
+function addTypingIndicator() {
+    const box = document.getElementById('chatMessages');
+    const id = 'typing_' + Date.now();
+    const b = document.createElement('div');
+    b.id = id;
+    b.className = 'chat-bubble bot';
+    b.innerHTML = '<span style="color:var(--text-dim);font-style:italic;">AI đang suy nghĩ...</span>';
+    box.appendChild(b);
+    box.scrollTop = box.scrollHeight;
+    return id;
+}
+
+function removeTypingIndicator(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+async function uploadChatFile(inputEl) {
+    if (!inputEl.files || inputEl.files.length === 0) return;
+    const file = inputEl.files[0];
+    addUserChatMessage(`📁 Đang tải lên file: ${file.name}...`);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const typingId = addTypingIndicator();
+    try {
+        const resp = await fetch('/api/chat/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+        removeTypingIndicator(typingId);
+        if (data.reply) {
+            addBotChatMessage(data.reply);
+            if (data.total_created > 0) {
+                await loadB2BOrders();
+            }
+        } else {
+            addBotChatMessage('⚠️ Không thể đọc dữ liệu file.');
+        }
+    } catch (e) {
+        removeTypingIndicator(typingId);
+        addBotChatMessage('⚠️ Lỗi gửi file lên server.');
+    }
+    inputEl.value = '';
 }
 
 // ═══════════════════════════════════════
@@ -1701,6 +3111,7 @@ function renderRoadsTable(roads, sq='') {
 // ═══════════════════════════════════════
 // INITIALIZATION
 // ═══════════════════════════════════════
+initB2B();
 initMap();
 loadSavedLocations();
 loadVehicles();

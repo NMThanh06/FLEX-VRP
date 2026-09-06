@@ -15,6 +15,13 @@ import sys
 import json
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,11 +42,15 @@ from db import (
     save_trip, start_trip, complete_trip, set_trip_manual_time,
     get_trips, get_trip, get_events, save_event, delete_event,
     get_all_ai_corrections,
+    get_orders, save_order, save_customer, get_customers, get_optimization_run,
 )
 from ai_learner import (
     AILearner, EventsAnalyzer, lookup_vehicle_specs,
     suggest_alternative_routes,
 )
+from test_data import seed_b2b_test_data
+from pipeline import run_full_pipeline, start_async_pipeline
+from chatbot import process_user_chat, process_uploaded_file
 
 app = FastAPI(title="FLEX-VRP Route Optimizer v2")
 
@@ -1029,6 +1040,223 @@ async def api_traffic_lights():
         "count": len(TRAFFIC_LIGHTS),
         "lights": [{"lat": tl.lat, "lon": tl.lon} for tl in TRAFFIC_LIGHTS[:200]],
     }
+
+
+@app.post("/api/route-geometry")
+async def api_route_geometry(request: Request):
+    """
+    Nhận danh sách waypoints [{lat, lon}], trả về:
+    - segments: mỗi segment có geometry thực tế từ OSRM + traffic lights gần tuyến
+    - congestion info cho mỗi đoạn
+    """
+    body = await request.json()
+    waypoints = body.get("waypoints", [])
+    target_hour = body.get("target_hour")
+
+    if target_hour is None:
+        target_hour = datetime.now().hour
+    else:
+        target_hour = int(target_hour)
+
+    if len(waypoints) < 2:
+        return JSONResponse({"error": "Cần ít nhất 2 waypoints"}, status_code=400)
+
+    # Load traffic data cho khung giờ
+    traffic_data = load_traffic_data(PARQUET_PATH, target_hour) if PARQUET_PATH else _get_sample_traffic_data(target_hour)
+    avg_congestion = compute_average_congestion(traffic_data)
+
+    segments = []
+    all_route_lights = []
+
+    for i in range(len(waypoints) - 1):
+        wp_from = waypoints[i]
+        wp_to = waypoints[i + 1]
+        lat1, lon1 = float(wp_from["lat"]), float(wp_from["lon"])
+        lat2, lon2 = float(wp_to["lat"]), float(wp_to["lon"])
+
+        # Gọi OSRM để lấy geometry thực tế
+        osrm_coords = f"{lon1},{lat1};{lon2},{lat2}"
+        osrm_url = f"https://router.project-osrm.org/route/v1/driving/{osrm_coords}?overview=full&geometries=geojson&steps=true"
+        geometry = [[lat1, lon1], [lat2, lon2]]  # Fallback: đường thẳng
+        osrm_distance = None
+        osrm_duration = None
+
+        try:
+            req = urllib.request.Request(osrm_url, headers={"User-Agent": "FLEX-VRP/2.0"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                osrm_data = json.loads(resp.read().decode('utf-8'))
+                if osrm_data.get("code") == "Ok" and osrm_data.get("routes"):
+                    route = osrm_data["routes"][0]
+                    coords = route["geometry"]["coordinates"]
+                    geometry = [[c[1], c[0]] for c in coords]  # GeoJSON [lon,lat] → [lat,lon]
+                    osrm_distance = round(route.get("distance", 0) / 1000, 2)  # m → km
+                    osrm_duration = round(route.get("duration", 0) / 60, 1)    # s → min
+        except Exception as e:
+            print(f"[API] OSRM error for segment {i}: {e}")
+
+        # Tìm congestion gần nhất cho đoạn này
+        mid_lat = (lat1 + lat2) / 2
+        mid_lon = (lon1 + lon2) / 2
+        seg_congestion = find_nearest_road_congestion(
+            mid_lat, mid_lon, traffic_data, ROAD_COORDS, avg_congestion
+        )
+
+        # Tìm đèn giao thông gần tuyến (< 200m từ bất kỳ điểm nào trên geometry)
+        seg_lights = []
+        from vrp_engine import haversine_distance as _hd
+        # Sample mỗi 5 điểm trên geometry để tối ưu performance
+        sample_points = geometry[::max(1, len(geometry)//10)]
+        for tl in TRAFFIC_LIGHTS:
+            for pt in sample_points:
+                d = _hd(tl.lat, tl.lon, pt[0], pt[1])
+                if d < 0.2:  # < 200m
+                    seg_lights.append({"lat": tl.lat, "lon": tl.lon})
+                    all_route_lights.append({"lat": tl.lat, "lon": tl.lon})
+                    break
+
+        # Xác định trạng thái ùn tắc
+        if seg_congestion < 0.6:
+            status = "heavy"
+            color = "#ef4444"
+        elif seg_congestion < 0.75:
+            status = "medium"
+            color = "#f59e0b"
+        else:
+            status = "good"
+            color = "#22c55e"
+
+        segments.append({
+            "index": i,
+            "geometry": geometry,
+            "congestion_ratio": round(seg_congestion, 4),
+            "status": status,
+            "color": color,
+            "distance_km": osrm_distance,
+            "duration_min": osrm_duration,
+            "traffic_lights": seg_lights,
+            "traffic_light_count": len(seg_lights),
+        })
+
+    # Deduplicate traffic lights
+    seen = set()
+    unique_lights = []
+    for tl in all_route_lights:
+        key = (round(tl["lat"], 5), round(tl["lon"], 5))
+        if key not in seen:
+            seen.add(key)
+            unique_lights.append(tl)
+
+    return {
+        "success": True,
+        "segments": segments,
+        "total_traffic_lights": len(unique_lights),
+        "all_traffic_lights": unique_lights,
+        "hour": target_hour,
+        "avg_congestion": round(avg_congestion, 4),
+    }
+
+
+# ═══════════════════════════════════════
+# PHASE II: B2B Order Management & Optimization
+# ═══════════════════════════════════════
+
+@app.get("/api/b2b/orders")
+async def api_b2b_orders(status: str = None):
+    """Lấy danh sách đơn hàng B2B."""
+    return {"success": True, "orders": get_orders(status)}
+
+
+@app.post("/api/b2b/orders")
+async def api_b2b_save_order(request: Request):
+    """Tạo hoặc cập nhật đơn hàng B2B."""
+    body = await request.json()
+    cust_id = body.get("customer_id")
+    if not cust_id and body.get("customer_name"):
+        cust_id = save_customer(
+            body["customer_name"],
+            body.get("customer_address", "TP. Hồ Chí Minh"),
+            float(body.get("lat", 10.776)),
+            float(body.get("lon", 106.699))
+        )
+    order = save_order(
+        customer_id=cust_id,
+        order_code=body.get("order_code"),
+        status=body.get("status", "confirmed"),
+        total_quantity=int(body.get("total_quantity", 50)),
+        total_weight_kg=float(body.get("total_weight_kg", 250)),
+        time_window_start=body.get("time_window_start", "08:00"),
+        time_window_end=body.get("time_window_end", "17:00"),
+        notes=body.get("notes", ""),
+        source=body.get("source", "manual")
+    )
+    return {"success": True, "order": order}
+
+
+@app.post("/api/b2b/seed")
+async def api_b2b_seed():
+    """Nạp nhanh bộ dữ liệu test B2B MVP (1 kho Q7, 6 tiệm tạp hóa, 3 xe, 10 đơn)."""
+    stats = seed_b2b_test_data()
+    return {"success": True, "stats": stats, "orders": get_orders()}
+
+
+@app.post("/api/b2b/optimize")
+async def api_b2b_optimize(request: Request):
+    """Khởi chạy pipeline tối ưu đa xe đa ngày (bất đồng bộ)."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    days = int(body.get("planning_days", 5))
+    run_id = start_async_pipeline(planning_days=days)
+    return {"success": True, "run_id": run_id}
+
+
+@app.get("/api/b2b/optimize-status/{run_id}")
+async def api_b2b_optimize_status(run_id: str):
+    """Kiểm tra tiến trình tối ưu theo thời gian thực."""
+    run_info = get_optimization_run(run_id)
+    if not run_info:
+        return JSONResponse({"error": "Không tìm thấy phiên tối ưu"}, status_code=404)
+    return {"success": True, "run": run_info}
+
+
+@app.get("/api/b2b/optimize-result/{run_id}")
+async def api_b2b_optimize_result(run_id: str):
+    """Lấy toàn bộ kết quả phân bổ chi phí, so sánh và lộ trình xe."""
+    run_info = get_optimization_run(run_id)
+    if not run_info:
+        return JSONResponse({"error": "Không tìm thấy phiên tối ưu"}, status_code=404)
+    res_data = {}
+    if run_info.get("result_json"):
+        try:
+            res_data = json.loads(run_info["result_json"])
+        except Exception:
+            pass
+    return {"success": True, "run": run_info, "result": res_data}
+
+
+@app.post("/api/chat")
+async def api_chat(request: Request):
+    """Nhận tin nhắn Chatbot, bóc tách đơn hàng bằng AI."""
+    body = await request.json()
+    message = body.get("message", "")
+    session_id = body.get("session_id", "default")
+    provider = body.get("provider", "gemini")
+    res = process_user_chat(message, session_id=session_id, preferred_provider=provider)
+    return res
+
+
+@app.post("/api/chat/upload")
+async def api_chat_upload(request: Request):
+    """Upload file đơn hàng (CSV/Text/Excel) để AI đọc."""
+    form = await request.form()
+    file_obj = form.get("file")
+    if not file_obj:
+        return JSONResponse({"error": "Chưa chọn file để tải lên"}, status_code=400)
+    contents = await file_obj.read()
+    res = process_uploaded_file(contents, file_obj.filename)
+    return res
 
 
 if __name__ == "__main__":

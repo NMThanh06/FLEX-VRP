@@ -27,3 +27,6 @@ Thumbs.db
 solver/_explore_data.py
 solver/_result.json
 solver/_BAI_GIANG_VRP.md
+solver/_BAI_GIANG_PHASE2.md
+solver/_BAI_GIANG_*.md
+
