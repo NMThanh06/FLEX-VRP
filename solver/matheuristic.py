@@ -360,188 +360,230 @@ class MultiArmedBandit:
 
 def _vnd_relocate(sol: Solution) -> tuple[Solution, float]:
     """Neighborhood 1: Relocate — chuyển 1 stop từ route A sang route B."""
-    best_sol = sol
-    best_improvement = 0
+    best_improvement = 0.0
+    best_move = None  # (r1_idx, r2_idx, si, pos)
 
-    routes_with_stops = [r for r in sol.routes if r.num_stops > 0]
+    routes_with_stops = [(idx, r) for idx, r in enumerate(sol.routes) if r.num_stops > 0]
     if len(routes_with_stops) < 1:
-        return sol, 0
+        return sol, 0.0
 
-    for r1 in routes_with_stops:
+    for r1_idx, r1 in routes_with_stops:
         for si in range(r1.num_stops):
             stop = r1.stops[si]
-            for r2 in sol.routes:
+            for r2_idx, r2 in enumerate(sol.routes):
                 if r2 is r1:
                     continue
-                if r2.remaining_capacity_kg < stop.weight_kg * 0.9:
+                if r2.remaining_capacity_kg < stop.weight_kg:
                     continue
 
+                old_cost = r1.cost() + r2.cost()
+                moved_stop = r1.stops.pop(si)
                 for pos in range(r2.num_stops + 1):
-                    # Tính improvement
-                    new_sol = sol.clone()
-                    # Tìm r1, r2 tương ứng trong clone
-                    cr1 = new_sol.routes[sol.routes.index(r1)]
-                    cr2 = new_sol.routes[sol.routes.index(r2)]
-                    moved_stop = cr1.stops.pop(si)
-                    cr2.stops.insert(pos, moved_stop)
+                    r2.stops.insert(pos, moved_stop)
+                    if not r2.is_overloaded:
+                        new_cost = r1.cost() + r2.cost()
+                        imp = old_cost - new_cost
+                        if imp > best_improvement:
+                            best_improvement = imp
+                            best_move = (r1_idx, r2_idx, si, pos)
+                    r2.stops.pop(pos)
+                r1.stops.insert(si, moved_stop)
 
-                    improvement = sol.total_cost() - new_sol.total_cost()
-                    if improvement > best_improvement:
-                        best_improvement = improvement
-                        best_sol = new_sol
+    if best_move and best_improvement > 1e-6:
+        new_sol = sol.clone()
+        mr1 = new_sol.routes[best_move[0]]
+        mr2 = new_sol.routes[best_move[1]]
+        m_stop = mr1.stops.pop(best_move[2])
+        mr2.stops.insert(best_move[3], m_stop)
+        return new_sol, best_improvement
 
-    return best_sol, best_improvement
+    return sol, 0.0
 
 
 def _vnd_swap(sol: Solution) -> tuple[Solution, float]:
     """Neighborhood 2: Swap — hoán đổi 2 stops giữa 2 routes."""
-    best_sol = sol
-    best_improvement = 0
+    best_improvement = 0.0
+    best_move = None
 
-    routes_with_stops = [r for r in sol.routes if r.num_stops > 0]
+    routes_with_stops = [(idx, r) for idx, r in enumerate(sol.routes) if r.num_stops > 0]
     if len(routes_with_stops) < 2:
-        return sol, 0
+        return sol, 0.0
 
-    for i, r1 in enumerate(routes_with_stops):
-        for j, r2 in enumerate(routes_with_stops):
+    for i, (r1_idx, r1) in enumerate(routes_with_stops):
+        for j, (r2_idx, r2) in enumerate(routes_with_stops):
             if j <= i:
                 continue
             for si in range(r1.num_stops):
                 for sj in range(r2.num_stops):
-                    new_sol = sol.clone()
-                    cr1 = new_sol.routes[sol.routes.index(r1)]
-                    cr2 = new_sol.routes[sol.routes.index(r2)]
-
-                    # Swap
-                    cr1.stops[si], cr2.stops[sj] = cr2.stops[sj], cr1.stops[si]
-
-                    # Check feasibility
-                    if cr1.is_overloaded or cr2.is_overloaded:
+                    w1 = r1.stops[si].weight_kg
+                    w2 = r2.stops[sj].weight_kg
+                    if (r1.total_load_kg - w1 + w2 > r1.capacity_kg * 1.01 or
+                        r2.total_load_kg - w2 + w1 > r2.capacity_kg * 1.01):
                         continue
 
-                    improvement = sol.total_cost() - new_sol.total_cost()
-                    if improvement > best_improvement:
-                        best_improvement = improvement
-                        best_sol = new_sol
+                    old_cost = r1.cost() + r2.cost()
+                    r1.stops[si], r2.stops[sj] = r2.stops[sj], r1.stops[si]
+                    new_cost = r1.cost() + r2.cost()
+                    imp = old_cost - new_cost
+                    if imp > best_improvement:
+                        best_improvement = imp
+                        best_move = (r1_idx, r2_idx, si, sj)
+                    r1.stops[si], r2.stops[sj] = r2.stops[sj], r1.stops[si]
 
-    return best_sol, best_improvement
+    if best_move and best_improvement > 1e-6:
+        new_sol = sol.clone()
+        cr1 = new_sol.routes[best_move[0]]
+        cr2 = new_sol.routes[best_move[1]]
+        cr1.stops[best_move[2]], cr2.stops[best_move[3]] = cr2.stops[best_move[3]], cr1.stops[best_move[2]]
+        return new_sol, best_improvement
+
+    return sol, 0.0
 
 
 def _vnd_two_opt_star(sol: Solution) -> tuple[Solution, float]:
     """Neighborhood 3: 2-Opt* — hoán đổi đuôi giữa 2 routes."""
-    best_sol = sol
-    best_improvement = 0
+    best_improvement = 0.0
+    best_move = None
 
-    routes_with_stops = [r for r in sol.routes if r.num_stops >= 2]
+    routes_with_stops = [(idx, r) for idx, r in enumerate(sol.routes) if r.num_stops >= 2]
     if len(routes_with_stops) < 2:
-        return sol, 0
+        return sol, 0.0
 
-    for i, r1 in enumerate(routes_with_stops):
-        for j, r2 in enumerate(routes_with_stops):
+    for i, (r1_idx, r1) in enumerate(routes_with_stops):
+        for j, (r2_idx, r2) in enumerate(routes_with_stops):
             if j <= i:
                 continue
             for k in range(1, r1.num_stops):
                 for l in range(1, r2.num_stops):
-                    new_sol = sol.clone()
-                    cr1 = new_sol.routes[sol.routes.index(r1)]
-                    cr2 = new_sol.routes[sol.routes.index(r2)]
-
-                    # Swap tails
-                    tail1 = cr1.stops[k:]
-                    tail2 = cr2.stops[l:]
-                    cr1.stops = cr1.stops[:k] + tail2
-                    cr2.stops = cr2.stops[:l] + tail1
-
-                    if cr1.is_overloaded or cr2.is_overloaded:
+                    tail1_w = sum(s.weight_kg for s in r1.stops[k:])
+                    tail2_w = sum(s.weight_kg for s in r2.stops[l:])
+                    head1_w = r1.total_load_kg - tail1_w
+                    head2_w = r2.total_load_kg - tail2_w
+                    if (head1_w + tail2_w > r1.capacity_kg * 1.01 or
+                        head2_w + tail1_w > r2.capacity_kg * 1.01):
                         continue
 
-                    improvement = sol.total_cost() - new_sol.total_cost()
-                    if improvement > best_improvement:
-                        best_improvement = improvement
-                        best_sol = new_sol
+                    old_cost = r1.cost() + r2.cost()
+                    tail1 = r1.stops[k:]
+                    tail2 = r2.stops[l:]
+                    r1.stops = r1.stops[:k] + tail2
+                    r2.stops = r2.stops[:l] + tail1
 
-    return best_sol, best_improvement
+                    new_cost = r1.cost() + r2.cost()
+                    imp = old_cost - new_cost
+                    if imp > best_improvement:
+                        best_improvement = imp
+                        best_move = (r1_idx, r2_idx, k, l)
+
+                    r1.stops = r1.stops[:k] + tail1
+                    r2.stops = r2.stops[:l] + tail2
+
+    if best_move and best_improvement > 1e-6:
+        new_sol = sol.clone()
+        cr1 = new_sol.routes[best_move[0]]
+        cr2 = new_sol.routes[best_move[1]]
+        k, l = best_move[2], best_move[3]
+        tail1 = cr1.stops[k:]
+        tail2 = cr2.stops[l:]
+        cr1.stops = cr1.stops[:k] + tail2
+        cr2.stops = cr2.stops[:l] + tail1
+        return new_sol, best_improvement
+
+    return sol, 0.0
 
 
 def _vnd_or_opt(sol: Solution) -> tuple[Solution, float]:
     """Neighborhood 4: Or-Opt — di chuyển chuỗi 2-3 stops liên tiếp."""
-    best_sol = sol
-    best_improvement = 0
+    best_improvement = 0.0
+    best_move = None
 
-    routes_with_stops = [r for r in sol.routes if r.num_stops >= 2]
+    routes_with_stops = [(idx, r) for idx, r in enumerate(sol.routes) if r.num_stops >= 2]
 
-    for r1 in routes_with_stops:
-        for seg_len in [3, 2]:  # Thử chuỗi 3 trước, rồi 2
+    for r1_idx, r1 in routes_with_stops:
+        for seg_len in [3, 2]:
             if r1.num_stops < seg_len:
                 continue
             for start in range(r1.num_stops - seg_len + 1):
                 segment = r1.stops[start:start + seg_len]
                 seg_weight = sum(s.weight_kg for s in segment)
 
-                for r2 in sol.routes:
+                for r2_idx, r2 in enumerate(sol.routes):
                     if r2 is r1:
                         continue
-                    if r2.remaining_capacity_kg < seg_weight * 0.9:
+                    if r2.remaining_capacity_kg < seg_weight:
                         continue
 
+                    old_cost = r1.cost() + r2.cost()
+                    r1.stops = r1.stops[:start] + r1.stops[start + seg_len:]
                     for pos in range(r2.num_stops + 1):
-                        new_sol = sol.clone()
-                        cr1 = new_sol.routes[sol.routes.index(r1)]
-                        cr2 = new_sol.routes[sol.routes.index(r2)]
+                        r2.stops[pos:pos] = segment
+                        if not r2.is_overloaded:
+                            new_cost = r1.cost() + r2.cost()
+                            imp = old_cost - new_cost
+                            if imp > best_improvement:
+                                best_improvement = imp
+                                best_move = (r1_idx, r2_idx, start, seg_len, pos)
+                        r2.stops = r2.stops[:pos] + r2.stops[pos + seg_len:]
+                    r1.stops = r1.stops[:start] + segment + r1.stops[start:]
 
-                        moved = cr1.stops[start:start + seg_len]
-                        del cr1.stops[start:start + seg_len]
-                        for k, s in enumerate(moved):
-                            cr2.stops.insert(pos + k, s)
+    if best_move and best_improvement > 1e-6:
+        new_sol = sol.clone()
+        cr1 = new_sol.routes[best_move[0]]
+        cr2 = new_sol.routes[best_move[1]]
+        start, seg_len, pos = best_move[2], best_move[3], best_move[4]
+        seg = cr1.stops[start:start + seg_len]
+        del cr1.stops[start:start + seg_len]
+        cr2.stops[pos:pos] = seg
+        return new_sol, best_improvement
 
-                        if cr2.is_overloaded:
-                            continue
-
-                        improvement = sol.total_cost() - new_sol.total_cost()
-                        if improvement > best_improvement:
-                            best_improvement = improvement
-                            best_sol = new_sol
-
-    return best_sol, best_improvement
+    return sol, 0.0
 
 
 def _vnd_cross_day(sol: Solution) -> tuple[Solution, float]:
     """Neighborhood 5: Cross-Day — chuyển stop sang ngày khác."""
-    best_sol = sol
-    best_improvement = 0
+    best_improvement = 0.0
+    best_move = None
 
-    routes_with_stops = [r for r in sol.routes if r.num_stops > 0]
+    routes_with_stops = [(idx, r) for idx, r in enumerate(sol.routes) if r.num_stops > 0]
 
-    for r1 in routes_with_stops:
+    for r1_idx, r1 in routes_with_stops:
         for si in range(r1.num_stops):
             stop = r1.stops[si]
-            for r2 in sol.routes:
+            for r2_idx, r2 in enumerate(sol.routes):
                 if r2 is r1 or r2.day_index == r1.day_index:
-                    continue  # Phải khác ngày
-                if r2.remaining_capacity_kg < stop.weight_kg * 0.9:
+                    continue
+                if r2.remaining_capacity_kg < stop.weight_kg:
                     continue
 
-                new_sol = sol.clone()
-                cr1 = new_sol.routes[sol.routes.index(r1)]
-                cr2 = new_sol.routes[sol.routes.index(r2)]
-
-                moved = cr1.stops.pop(si)
-                # Chèn vào vị trí tốt nhất
+                old_cost = r1.cost() + r2.cost()
+                moved = r1.stops.pop(si)
                 best_pos = 0
                 best_pos_cost = float('inf')
-                for pos in range(cr2.num_stops + 1):
-                    c = _insertion_cost(cr2, moved, pos)
+                for pos in range(r2.num_stops + 1):
+                    c = _insertion_cost(r2, moved, pos)
                     if c < best_pos_cost:
                         best_pos_cost = c
                         best_pos = pos
-                cr2.stops.insert(best_pos, moved)
 
-                improvement = sol.total_cost() - new_sol.total_cost()
-                if improvement > best_improvement:
-                    best_improvement = improvement
-                    best_sol = new_sol
+                r2.stops.insert(best_pos, moved)
+                if not r2.is_overloaded:
+                    new_cost = r1.cost() + r2.cost()
+                    imp = old_cost - new_cost
+                    if imp > best_improvement:
+                        best_improvement = imp
+                        best_move = (r1_idx, r2_idx, si, best_pos)
+                r2.stops.pop(best_pos)
+                r1.stops.insert(si, moved)
 
-    return best_sol, best_improvement
+    if best_move and best_improvement > 1e-6:
+        new_sol = sol.clone()
+        cr1 = new_sol.routes[best_move[0]]
+        cr2 = new_sol.routes[best_move[1]]
+        moved = cr1.stops.pop(best_move[2])
+        cr2.stops.insert(best_move[3], moved)
+        return new_sol, best_improvement
+
+    return sol, 0.0
 
 
 # Danh sách neighborhoods
@@ -782,7 +824,7 @@ def run_matheuristic(
     }
 
     print(f"\n[Matheuristic] Stops: {len(stops)}, Vehicles: {len(vehicles)}, Days: {num_days}")
-    print(f"[Matheuristic] GRASP×{grasp_iterations} → VND×{vnd_iterations} → VNS×{vns_iterations}")
+    print(f"[Matheuristic] GRASPx{grasp_iterations} -> VNDx{vnd_iterations} -> VNSx{vns_iterations}")
 
     # Phase 1: GRASP Construction + VND
     for i in range(grasp_iterations):

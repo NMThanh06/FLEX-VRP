@@ -1,0 +1,67 @@
+function viewTripDetailOnMap(dayIdx, routeIdx, noReset = false) {
+            if (!currentB2BResult) return;
+            const day = currentB2BResult.schedule[dayIdx];
+            const route = day.routes[routeIdx];
+            if (!route) return;
+
+            if (!noReset) {
+                isShowingRawStops = false;
+                const btn = document.getElementById('btnToggleRawStops');
+                if (btn) btn.textContent = '📋 Xem chi tiết đơn gốc (Excel)';
+                currentTripDayIdx = dayIdx;
+                currentTripRouteIdx = routeIdx;
+
+                // Show modal on first open
+                document.getElementById('tripDetailModal').classList.add('visible');
+            }
+
+            document.getElementById('modalTripTitle').textContent = `${route.vehicle_name} — ${day.day_name} (${day.date})`;
+            const displayStops = route.merged_stops || route.stops;
+            document.getElementById('modalTripSubtitle').textContent = `Mã Vận Đơn: ${route.waybill_code || 'N/A'} • Tải trọng: ${route.total_load_kg}/${route.capacity_kg} kg • Quãng đường: ${route.distance_km} km • ${displayStops.length} điểm dừng`;
+
+            const tbody = document.getElementById('modalTripStopsBody');
+
+            if (isShowingRawStops && route.raw_stops) {
+                tbody.innerHTML = route.raw_stops.map(s => {
+                    let nameHtml = `<strong>${s.name}</strong>`;
+                    if (s.order_code) nameHtml += ` <span style="font-size:0.7rem;color:var(--text-dim);">(${s.order_code})</span>`;
+
+                    return `
+                <tr>
+                    <td><span class="order-code-badge" style="background:#4b5563;">${s.step}</span></td>
+                    <td>${nameHtml}</td>
+                    <td>-</td>
+                    <td>${s.quantity ? `<strong>${s.quantity} thùng</strong> (${s.weight_kg} kg)` : (s.action || 'Trạm kho')}</td>
+                </tr>
+            `;
+                }).join('');
+            } else {
+                tbody.innerHTML = displayStops.map(s => {
+                    let nameHtml = `<strong>${s.name}</strong>`;
+                    let qtyHtml = s.quantity ? `<strong>${s.quantity} thùng</strong> (${s.weight_kg} kg)` : (s.action || 'Trạm kho');
+
+                    if (s.deliveries && s.deliveries.length > 0) {
+                        const multiHtml = s.deliveries.map(d => `<div style="font-size:0.75rem;margin-top:4px;padding-top:4px;border-top:1px dashed var(--border);">• <strong>${d.customer_name}</strong> <span style="font-size:0.7rem;color:var(--text-dim);">(${d.order_code})</span>: <strong>${d.quantity} thùng</strong> (${d.weight_kg} kg)</div>`).join('');
+                        qtyHtml = `<div style="margin-bottom:4px;color:var(--accent-light);"><strong>Tổng gộp: ${s.quantity} thùng</strong> (${s.weight_kg} kg)</div>` + multiHtml;
+                    } else if (s.order_code) {
+                        nameHtml += ` <span style="font-size:0.7rem;color:var(--text-dim);">(${s.order_code})</span>`;
+                    }
+
+                    return `
+                <tr>
+                    <td><span class="order-code-badge">${s.step}</span></td>
+                    <td>${nameHtml}</td>
+                    <td><span style="color:var(--green);font-weight:600;">${s.eta || '08:00'}</span> ${s.time_window ? `<span style="font-size:0.7rem;color:var(--text-dim);">[${s.time_window}]</span>` : ''}</td>
+                    <td>${qtyHtml}</td>
+                </tr>
+            `;
+                }).join('');
+            }
+
+            // Render Leaflet Map inside Modal
+            setTimeout(async () => {
+                if (!tripDetailLeafletMap) {
+                    tripDetailLeafletMap = L.map('tripDetailMap', { zoomControl: true }).setView([10.776, 106.699], 13);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        maxZoom: 19, attribution: '© CartoDB'
+                    }).addTo(tripDetai

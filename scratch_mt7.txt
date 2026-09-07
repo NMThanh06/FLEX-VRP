@@ -1,0 +1,60 @@
+function renderB2BResults(res) {
+            document.getElementById('b2bResultsCard').style.display = 'flex';
+
+            // 1. KPI Cards
+            const kpis = res.kpis || {};
+            const comp = res.comparison || {};
+            document.getElementById('kpiSavedPct').textContent = `-${kpis.saved_percentage || 0}%`;
+            document.getElementById('kpiSavedCost').textContent = `Tiết kiệm: ${(kpis.saved_cost_vnd || 0).toLocaleString()} đ`;
+            document.getElementById('kpiSavedKm').textContent = `-${kpis.saved_distance_km || 0} km`;
+            document.getElementById('kpiOptKm').textContent = `Tổng lộ trình: ${kpis.total_distance_km || 0} km`;
+            document.getElementById('kpiDeliveries').textContent = `${kpis.total_deliveries || 0} lần giao`;
+            document.getElementById('kpiVehiclesUsed').textContent = `${kpis.vehicles_used || 0} xe tải điều động`;
+            document.getElementById('kpiSavedHours').textContent = `-${kpis.saved_time_hours || 0} giờ`;
+            document.getElementById('kpiTotalTime').textContent = `Tổng thời gian: ${kpis.total_time_hours || 0}h`;
+
+            // Summary bar ngắn gọn (luôn hiện)
+            document.getElementById('sumOrders').textContent = kpis.total_orders || 0;
+            document.getElementById('sumDistantOrders').textContent = res.distant_orders_count || 0;
+            document.getElementById('sumVehicles').textContent = kpis.vehicles_used || 0;
+            document.getElementById('sumKm').textContent = kpis.total_distance_km || 0;
+            document.getElementById('sumHours').textContent = kpis.total_time_hours || 0;
+            document.getElementById('sumSaved').textContent = `${kpis.saved_percentage || 0}%`;
+
+            // 2. Comparison Table
+            const naive = comp.naive || {};
+            const opt = comp.optimized || {};
+            const sav = comp.savings || {};
+            document.getElementById('comparisonTableBody').innerHTML = `
+        <tr>
+            <td><strong>Tổng Quãng Đường Vận Chuyển</strong></td>
+            <td>${naive.distance_km || 0} km</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.distance_km || 0} km</td>
+            <td style="color:var(--green);font-weight:700;">-${sav.km || 0} km (${sav.pct || 0}%)</td>
+        </tr>
+        <tr>
+            <td><strong>Thời Gian Xe Lăn Bánh Trên Đường</strong></td>
+            <td>${naive.time_hours || 0} giờ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.time_hours || 0} giờ</td>
+            <td style="color:var(--green);font-weight:700;">-${sav.hours || 0} giờ</td>
+        </tr>
+        <tr>
+            <td><strong>Ước Tính Nhiên Liệu & Khấu Hao</strong></td>
+            <td>${(naive.cost_vnd || 0).toLocaleString()} đ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${(opt.cost_vnd || 0).toLocaleString()} đ</td>
+            <td style="color:var(--green);font-weight:700;">-${(sav.cost_vnd || 0).toLocaleString()} đ</td>
+        </tr>
+        <tr>
+            <td><strong>Số Lượt Chuyến Xuất Bến</strong></td>
+            <td>${naive.trips || 0} chuyến đơn lẻ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.trips || 0} tuyến gom liên hoàn</td>
+            <td style="color:var(--green);font-weight:700;">Tiết kiệm ${Math.max(0, (naive.trips || 0) - (opt.trips || 0))} chuyến xe</td>
+        </tr>
+    `;
+
+            // 3. Dinic Split Delivery Table
+            const splits = res.split_delivery || [];
+            document.getElementById('splitDeliveryTableBody').innerHTML = splits.map(s => {
+                const typeBadge = s.is_split
+                    ? `<span style="background:rgba(108,99,255,0.2);color:var(--accent-light);padding:3px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">✂️ Tách ${s.split_count} đợt</span>`
+                    : `<span style="background:rgba(52,211,153,0.15);color:var(--green);padding:3px 8px;border-radius:4px;font-size:0.75r

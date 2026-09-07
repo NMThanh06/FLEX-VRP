@@ -1,0 +1,6 @@
+ar(--text-dim);"></div>
+                    </div>
+                </div>
+                <!-- <button class="btn-b2b" onclick="toggleRawStops()" id="btnToggleRawStops" style="display:none; font-size:0.75rem;padding:6px 12px;background:var(--accent);border-radius:6px;">📋 Xem chi tiết đơn gốc (Excel)</button> -->
+            </div>
+            <div 

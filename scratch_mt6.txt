@@ -1,0 +1,739 @@
+function renderB2BResults(res) {
+            document.getElementById('b2bResultsCard').style.display = 'flex';
+
+            // 1. KPI Cards
+            const kpis = res.kpis || {};
+            const comp = res.comparison || {};
+            document.getElementById('kpiSavedPct').textContent = `-${kpis.saved_percentage || 0}%`;
+            document.getElementById('kpiSavedCost').textContent = `Tiết kiệm: ${(kpis.saved_cost_vnd || 0).toLocaleString()} đ`;
+            document.getElementById('kpiSavedKm').textContent = `-${kpis.saved_distance_km || 0} km`;
+            document.getElementById('kpiOptKm').textContent = `Tổng lộ trình: ${kpis.total_distance_km || 0} km`;
+            document.getElementById('kpiDeliveries').textContent = `${kpis.total_deliveries || 0} lần giao`;
+            document.getElementById('kpiVehiclesUsed').textContent = `${kpis.vehicles_used || 0} xe tải điều động`;
+            document.getElementById('kpiSavedHours').textContent = `-${kpis.saved_time_hours || 0} giờ`;
+            document.getElementById('kpiTotalTime').textContent = `Tổng thời gian: ${kpis.total_time_hours || 0}h`;
+
+            // Summary bar ngắn gọn (luôn hiện)
+            document.getElementById('sumOrders').textContent = kpis.total_orders || 0;
+            document.getElementById('sumDistantOrders').textContent = res.distant_orders_count || 0;
+            document.getElementById('sumVehicles').textContent = kpis.vehicles_used || 0;
+            document.getElementById('sumKm').textContent = kpis.total_distance_km || 0;
+            document.getElementById('sumHours').textContent = kpis.total_time_hours || 0;
+            document.getElementById('sumSaved').textContent = `${kpis.saved_percentage || 0}%`;
+
+            // 2. Comparison Table
+            const naive = comp.naive || {};
+            const opt = comp.optimized || {};
+            const sav = comp.savings || {};
+            document.getElementById('comparisonTableBody').innerHTML = `
+        <tr>
+            <td><strong>Tổng Quãng Đường Vận Chuyển</strong></td>
+            <td>${naive.distance_km || 0} km</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.distance_km || 0} km</td>
+            <td style="color:var(--green);font-weight:700;">-${sav.km || 0} km (${sav.pct || 0}%)</td>
+        </tr>
+        <tr>
+            <td><strong>Thời Gian Xe Lăn Bánh Trên Đường</strong></td>
+            <td>${naive.time_hours || 0} giờ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.time_hours || 0} giờ</td>
+            <td style="color:var(--green);font-weight:700;">-${sav.hours || 0} giờ</td>
+        </tr>
+        <tr>
+            <td><strong>Ước Tính Nhiên Liệu & Khấu Hao</strong></td>
+            <td>${(naive.cost_vnd || 0).toLocaleString()} đ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${(opt.cost_vnd || 0).toLocaleString()} đ</td>
+            <td style="color:var(--green);font-weight:700;">-${(sav.cost_vnd || 0).toLocaleString()} đ</td>
+        </tr>
+        <tr>
+            <td><strong>Số Lượt Chuyến Xuất Bến</strong></td>
+            <td>${naive.trips || 0} chuyến đơn lẻ</td>
+            <td style="color:var(--accent-light);font-weight:700;">${opt.trips || 0} tuyến gom liên hoàn</td>
+            <td style="color:var(--green);font-weight:700;">Tiết kiệm ${Math.max(0, (naive.trips || 0) - (opt.trips || 0))} chuyến xe</td>
+        </tr>
+    `;
+
+            // 3. Dinic Split Delivery Table
+            const splits = res.split_delivery || [];
+            document.getElementById('splitDeliveryTableBody').innerHTML = splits.map(s => {
+                const typeBadge = s.is_split
+                    ? `<span style="background:rgba(108,99,255,0.2);color:var(--accent-light);padding:3px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">✂️ Tách ${s.split_count} đợt</span>`
+                    : `<span style="background:rgba(52,211,153,0.15);color:var(--green);padding:3px 8px;border-radius:4px;font-size:0.75rem;">1 lần</span>`;
+
+                const details = (s.deliveries || []).map(d =>
+                    `<div style="font-size:0.75rem;margin-top:2px;">• <strong>${d.date}</strong> | ${d.vehicle}: <strong>${d.quantity} thùng</strong> (${d.weight_kg} kg)</div>`
+                ).join('');
+
+                return `
+            <tr>
+                <td><span class="order-code-badge">${s.order_code}</span></td>
+                <td><strong>${s.customer_name}</strong></td>
+                <td>${typeBadge}</td>
+                <td>${s.split_count} lần</td>
+                <td>${details}</td>
+            </tr>
+        `;
+            }).join('');
+
+            // 4. Multi-Day Schedule
+            const schedTabs = document.getElementById('resScheduleTabs');
+            const schedCont = document.getElementById('resScheduleContent');
+            if (!res.schedule || !res.schedule.length) {
+                schedTabs.innerHTML = '';
+                schedCont.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Chưa có dữ liệu lịch trình</div>';
+                return;
+            }
+
+            schedTabs.innerHTML = res.schedule.map((day, idx) => `
+        <button class="res-subtab-btn ${idx === 0 ? 'active' : ''}" onclick="switchScheduleDay(${idx}, this)">
+            ${day.day_name} <br>
+            <span style="font-size:0.7rem;opacity:0.8;">${day.date}</span>
+        </button>
+    `).join('');
+
+            schedCont.innerHTML = res.schedule.map((day, dIdx) => {
+                if (!day.routes || day.routes.length === 0) {
+                    return `
+                <div class="schedule-day-card" id="schedDay_${dIdx}" style="display:${dIdx === 0 ? 'block' : 'none'};">
+                    <div class="schedule-day-header">
+                        <strong>📅 ${day.day_name} (${day.date})</strong>
+                        <span style="font-size:0.75rem;color:var(--text-dim);">Nghỉ giao / Không có chuyến</span>
+                    </div>
+                </div>
+            `;
+                }
+
+                const tripsHtml = day.routes.map((rt, rIdx) => {
+                    const stopsSummary = (rt.merged_stops || rt.stops).map(st => st.name).join(' ➔ ');
+                    return `
+                <div class="trip-item">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="trip-route-badge">🚛 ${rt.vehicle_name}</span>
+                            <span style="font-size:0.8rem;font-family:monospace;font-weight:bold;color:var(--accent-light);border:1px solid rgba(255,255,255,0.2);padding:2px 6px;border-radius:4px;">${rt.waybill_code || 'MVD-UNKNOWN'}</span>
+                        </div>
+                        <div style="font-size:0.75rem;color:var(--text-dim);display:flex;gap:12px;">
+                            <span>Tải: <strong>${rt.total_load_kg} / ${rt.capacity_kg} kg</strong> (${rt.load_percentage}%)</span>
+                            <span>Cự ly: <strong>${rt.distance_km} km</strong></span>
+                            <span>Chi phí: <strong>${(rt.cost_vnd || 0).toLocaleString()} đ</strong></span>
+                        </div>
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--text);line-height:1.4;margin-top:8px;">
+                        <strong>Hành trình:</strong> ${stopsSummary}
+                    </div>
+                    <div style="text-align:right;">
+                        <button class="btn-b2b" style="padding:4px 10px;font-size:0.72rem;" onclick="viewTripDetailOnMap(${dIdx}, ${rIdx})">
+                            🗺️ Xem Lộ Trình Trên Bản Đồ
+                        </button>
+                    </div>
+                </div>
+            `;
+                }).join('');
+
+                return `
+            <div class="schedule-day-card" id="schedDay_${dIdx}" style="display:${dIdx === 0 ? 'block' : 'none'};">
+                <div class="schedule-day-header">
+                    <div>
+                        <strong style="font-size:0.92rem;color:#fff;">📅 ${day.day_name}</strong>
+                        <span style="font-size:0.75rem;color:var(--text-dim);margin-left:8px;">(${day.date})</span>
+                    </div>
+                    <span class="badge" style="background:rgba(108,99,255,0.15);color:var(--accent-light);">
+                        ${day.total_day_orders || 0} đơn • ${day.total_trips} chuyến • ${day.total_day_dist_km} km • ${day.total_day_load_kg} kg
+                    </span>
+                </div>
+                ${tripsHtml}
+            </div>
+        `;
+            }).join('');
+
+            // Switch to schedule tab by default (khách hàng quan tâm lịch, không cần bảng phân tích)
+            switchResultTab('schedule', document.querySelector('.res-subtab-btn'));
+        }
+
+        function switchScheduleDay(idx, btn) {
+            document.querySelectorAll('#resScheduleTabs .res-subtab-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+
+            document.querySelectorAll('#resScheduleContent .schedule-day-card').forEach(c => {
+                c.style.display = 'none';
+            });
+            const selected = document.getElementById(`schedDay_${idx}`);
+            if (selected) selected.style.display = 'block';
+        }
+
+        let isShowingRawStops = false;
+        let currentTripDayIdx = -1;
+        let currentTripRouteIdx = -1;
+
+        function toggleRawStops() {
+            isShowingRawStops = !isShowingRawStops;
+            const btn = document.getElementById('btnToggleRawStops');
+            if (btn) btn.textContent = isShowingRawStops ? '🗺️ Trở về lịch trình rút gọn' : '📋 Xem chi tiết đơn gốc (Excel)';
+            if (currentTripDayIdx !== -1) {
+                viewTripDetailOnMap(currentTripDayIdx, currentTripRouteIdx, true);
+            }
+        }
+
+        // ── Trip Map Modal ──
+        function viewTripDetailOnMap(dayIdx, routeIdx, noReset = false) {
+            if (!currentB2BResult) return;
+            const day = currentB2BResult.schedule[dayIdx];
+            const route = day.routes[routeIdx];
+            if (!route) return;
+
+            if (!noReset) {
+                isShowingRawStops = false;
+                const btn = document.getElementById('btnToggleRawStops');
+                if (btn) btn.textContent = '📋 Xem chi tiết đơn gốc (Excel)';
+                currentTripDayIdx = dayIdx;
+                currentTripRouteIdx = routeIdx;
+
+                // Show modal on first open
+                document.getElementById('tripDetailModal').classList.add('visible');
+            }
+
+            document.getElementById('modalTripTitle').textContent = `${route.vehicle_name} — ${day.day_name} (${day.date})`;
+            const displayStops = route.merged_stops || route.stops;
+            document.getElementById('modalTripSubtitle').textContent = `Mã Vận Đơn: ${route.waybill_code || 'N/A'} • Tải trọng: ${route.total_load_kg}/${route.capacity_kg} kg • Quãng đường: ${route.distance_km} km • ${displayStops.length} điểm dừng`;
+
+            const tbody = document.getElementById('modalTripStopsBody');
+
+            if (isShowingRawStops && route.raw_stops) {
+                tbody.innerHTML = route.raw_stops.map(s => {
+                    let nameHtml = `<strong>${s.name}</strong>`;
+                    if (s.order_code) nameHtml += ` <span style="font-size:0.7rem;color:var(--text-dim);">(${s.order_code})</span>`;
+
+                    return `
+                <tr>
+                    <td><span class="order-code-badge" style="background:#4b5563;">${s.step}</span></td>
+                    <td>${nameHtml}</td>
+                    <td>-</td>
+                    <td>${s.quantity ? `<strong>${s.quantity} thùng</strong> (${s.weight_kg} kg)` : (s.action || 'Trạm kho')}</td>
+                </tr>
+            `;
+                }).join('');
+            } else {
+                tbody.innerHTML = displayStops.map(s => {
+                    let nameHtml = `<strong>${s.name}</strong>`;
+                    let qtyHtml = s.quantity ? `<strong>${s.quantity} thùng</strong> (${s.weight_kg} kg)` : (s.action || 'Trạm kho');
+
+                    if (s.deliveries && s.deliveries.length > 0) {
+                        const multiHtml = s.deliveries.map(d => `<div style="font-size:0.75rem;margin-top:4px;padding-top:4px;border-top:1px dashed var(--border);">• <strong>${d.customer_name}</strong> <span style="font-size:0.7rem;color:var(--text-dim);">(${d.order_code})</span>: <strong>${d.quantity} thùng</strong> (${d.weight_kg} kg)</div>`).join('');
+                        qtyHtml = `<div style="margin-bottom:4px;color:var(--accent-light);"><strong>Tổng gộp: ${s.quantity} thùng</strong> (${s.weight_kg} kg)</div>` + multiHtml;
+                    } else if (s.order_code) {
+                        nameHtml += ` <span style="font-size:0.7rem;color:var(--text-dim);">(${s.order_code})</span>`;
+                    }
+
+                    return `
+                <tr>
+                    <td><span class="order-code-badge">${s.step}</span></td>
+                    <td>${nameHtml}</td>
+                    <td><span style="color:var(--green);font-weight:600;">${s.eta || '08:00'}</span> ${s.time_window ? `<span style="font-size:0.7rem;color:var(--text-dim);">[${s.time_window}]</span>` : ''}</td>
+                    <td>${qtyHtml}</td>
+                </tr>
+            `;
+                }).join('');
+            }
+
+            // Render Leaflet Map inside Modal
+            setTimeout(async () => {
+                if (!tripDetailLeafletMap) {
+                    tripDetailLeafletMap = L.map('tripDetailMap', { zoomControl: true }).setView([10.776, 106.699], 13);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        maxZoom: 19, attribution: '© CartoDB'
+                    }).addTo(tripDetailLeafletMap);
+                } else {
+                    tripDetailLeafletMap.invalidateSize();
+                }
+
+                if (tripDetailRouteLayer) {
+                    tripDetailRouteLayer.clearLayers();
+                } else {
+                    tripDetailRouteLayer = L.layerGroup().addTo(tripDetailLeafletMap);
+                }
+
+                // ── Gọi API lấy đường thực tế (OSRM) + đèn giao thông + congestion ──
+                const waypoints = displayStops.map(st => ({ lat: st.lat, lon: st.lon }));
+
+                // Thêm marker cho mỗi stop trước
+                displayStops.forEach((st, idx) => {
+                    const pos = [st.lat, st.lon];
+                    const isDepot = st.type === 'depot';
+                    const iconHtml = isDepot
+                        ? `<div style="background:#10b981;border:3px solid white;border-radius:50%;width:28px;height:28px;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:14px;color:white;">🏭</div>`
+                        : `<div style="background:#6c63ff;border:2px solid white;border-radius:50%;width:26px;height:26px;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;">${st.step}</div>`;
+                    const marker = L.marker(pos, {
+                        icon: L.divIcon({ className: '', html: iconHtml, iconSize: [28, 28], iconAnchor: [14, 14] })
+                    }).addTo(tripDetailRouteLayer);
+                    let popupHtml = `<strong>${st.step}. ${st.name}</strong><br>ETA: ${st.eta || ''}<br>`;
+                    if (st.deliveries && st.deliveries.length > 0) {
+                        popupHtml += `<strong>Tổng gộp: ${st.quantity} thùng</strong> (${st.weight_kg} kg)`;
+                        st.deliveries.forEach(d => {
+                            popupHtml += `<div style="font-size:11px;margin-top:3px;">• ${d.customer_name}: ${d.quantity} thùng</div>`;
+                        });
+                    } else {
+                        popupHtml += st.quantity ? `${st.quantity} thùng (${st.weight_kg} kg)` : (st.action || 'Trạm kho');
+                    }
+                    marker.bindPopup(popupHtml);
+                });
+
+                // Gọi API route-geometry để lấy đường thực tế
+                try {
+                    const geoResp = await fetch('/api/route-geometry', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ waypoints: waypoints })
+                    });
+                    const geoData = await geoResp.json();
+
+                    if (geoData.success && geoData.segments) {
+                        const allBounds = [];
+
+                        // Vẽ từng segment với màu congestion
+                        geoData.segments.forEach((seg, segIdx) => {
+                            const isReturn = segIdx === geoData.segments.length - 1;
+                            const polyline = L.polyline(seg.geometry, {
+                                color: seg.color,
+                                weight: 6,
+                                opacity: 0.88,
+                                lineCap: 'round',
+                                lineJoin: 'round',
+                                dashArray: isReturn ? '10,8' : null
+                            }).addTo(tripDetailRouteLayer);
+
+                            // Tooltip congestion trên mỗi đoạn
+                            const congPct = Math.round(seg.congestion_ratio * 100);
+                            const statusText = seg.status === 'heavy' ? '🔴 Kẹt nặng' : seg.status === 'medium' ? '🟡 Kẹt vừa' : '🟢 Thông thoáng';
+                            polyline.bindTooltip(
+                                `${statusText} (${congPct}%)${seg.distance_km ? ` • ${seg.distance_km} km` : ''}${seg.traffic_light_count ? ` • 🚦${seg.traffic_light_count} đèn` : ''}`,
+                                { sticky: true }
+                            );
+
+                            seg.geometry.forEach(pt => allBounds.push(pt));
+                        });
+
+                        // Vẽ đèn giao thông trên tuyến
+                        if (geoData.all_traffic_lights && geoData.all_traffic_lights.length > 0) {
+                            geoData.all_traffic_lights.forEach(tl => {
+                                const tlMarker = L.marker([tl.lat, tl.lon], {
+                                    icon: L.divIcon({
+                                        className: '',
+                                        html: `<div style="font-size:14px;opacity:0.8;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));">🚦</div>`,
+                                        iconSize: [16, 16], iconAnchor: [8, 8]
+                                    })
+                                }).addTo(tripDetailRouteLayer);
+                                tlMarker.bindPopup('🚦 <strong>Đèn giao thông</strong><br>Thời gian chờ TB: ~21 giây');
+                            });
+                        }
+
+                        // Fit bounds
+                        if (allBounds.length > 0) {
+                            tripDetailLeafletMap.fitBounds(allBounds, { padding: [40, 40] });
+                        }
+                    } else {
+                        // Fallback: vẽ đường thẳng nếu API fail
+                        const latlngs = route.stops.map(st => [st.lat, st.lon]);
+                        if (latlngs.length > 1) {
+                            const poly = L.polyline(latlngs, { color: '#6c63ff', weight: 5, opacity: 0.85, dashArray: '8, 6' }).addTo(tripDetailRouteLayer);
+                            tripDetailLeafletMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+                        }
+                    }
+                } catch (geoErr) {
+                    console.error('Route geometry error:', geoErr);
+                    // Fallback: đường thẳng
+                    const latlngs = route.stops.map(st => [st.lat, st.lon]);
+                    if (latlngs.length > 1) {
+                        const poly = L.polyline(latlngs, { color: '#6c63ff', weight: 5, opacity: 0.85, dashArray: '8, 6' }).addTo(tripDetailRouteLayer);
+                        tripDetailLeafletMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+                    }
+                }
+            }, 250);
+        }
+
+        function closeTripModal() {
+            document.getElementById('tripDetailModal').classList.remove('visible');
+        }
+
+        // ── Chatbot Functions ──
+        // Engine is always 'gemini' (OpenRouter is auto-fallback in backend)
+        function setChatEngine(engine) {
+            currentChatEngine = 'gemini';
+        }
+
+        function sendQuickPrompt(text) {
+            document.getElementById('chatInput').value = text;
+            sendChatMessage();
+        }
+
+        function onChatInputKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            input.value = '';
+            addUserChatMessage(msg);
+
+            // Typing indicator
+            const typingId = addTypingIndicator();
+
+            try {
+                const resp = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: msg,
+                        provider: currentChatEngine
+                    })
+                });
+                const data = await resp.json();
+                removeTypingIndicator(typingId);
+
+                if (data.reply) {
+                    addBotChatMessage(data.reply, data.provider);
+                    // If order created, reload table
+                    if (data.action === 'order_created') {
+                        await loadB2BOrders();
+                    }
+                } else {
+                    addBotChatMessage('⚠️ Không nhận được phản hồi từ AI Engine.');
+                }
+            } catch (e) {
+                removeTypingIndicator(typingId);
+                addBotChatMessage('⚠️ Lỗi kết nối tới máy chủ Chatbot.');
+            }
+        }
+
+        function addUserChatMessage(text) {
+            const box = document.getElementById('chatMessages');
+            const b = document.createElement('div');
+            b.className = 'chat-bubble user';
+            b.textContent = text;
+            box.appendChild(b);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function addBotChatMessage(markdownText, provider) {
+            const box = document.getElementById('chatMessages');
+            const b = document.createElement('div');
+            b.className = 'chat-bubble bot';
+
+            // Parse simple markdown (bold, bullet, code)
+            let formatted = markdownText
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code style="background:rgba(108,99,255,0.2);padding:2px 5px;border-radius:4px;color:var(--accent-light);">$1</code>')
+                .replace(/\n• /g, '<br>• ')
+                .replace(/\n\n/g, '<br><br>');
+
+            if (provider) {
+                formatted += `<div style="margin-top:6px;font-size:0.65rem;color:var(--text-dim);text-align:right;">⚡ ${provider}</div>`;
+            }
+
+            b.innerHTML = formatted;
+            box.appendChild(b);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function addTypingIndicator() {
+            const box = document.getElementById('chatMessages');
+            const id = 'typing_' + Date.now();
+            const b = document.createElement('div');
+            b.id = id;
+            b.className = 'chat-bubble bot';
+            b.innerHTML = '<span style="color:var(--text-dim);font-style:italic;">AI đang suy nghĩ...</span>';
+            box.appendChild(b);
+            box.scrollTop = box.scrollHeight;
+            return id;
+        }
+
+        function removeTypingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        async function uploadChatFile(inputEl) {
+            if (!inputEl.files || inputEl.files.length === 0) return;
+            const file = inputEl.files[0];
+            addUserChatMessage(`📁 Đang tải lên file: ${file.name}...`);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const typingId = addTypingIndicator();
+            try {
+                const resp = await fetch('/api/chat/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                removeTypingIndicator(typingId);
+                if (data.reply) {
+                    addBotChatMessage(data.reply);
+                    if (data.total_created > 0) {
+                        await loadB2BOrders();
+                    }
+                } else {
+                    addBotChatMessage('⚠️ Không thể đọc dữ liệu file.');
+                }
+            } catch (e) {
+                removeTypingIndicator(typingId);
+                addBotChatMessage('⚠️ Lỗi gửi file lên server.');
+            }
+            inputEl.value = '';
+        }
+
+        // ═══════════════════════════════════════
+        // LOCATION MODE
+        // ═══════════════════════════════════════
+        function setLocationMode(mode) {
+            locationMode = mode;
+            document.getElementById('pillDepot').classList.toggle('active', mode === 'depot');
+            document.getElementById('pillDelivery').classList.toggle('active', mode === 'delivery');
+            document.getElementById('locationSearch').placeholder = mode === 'depot' ? 'Nhập địa chỉ thêm Kho mới...' : 'Nhập địa chỉ thêm Điểm giao hàng...';
+        }
+
+        function toggleMapPickingMode() {
+            isMapPickingMode = !isMapPickingMode;
+            const btn = document.getElementById('mapPickBtn');
+            if (isMapPickingMode) {
+                btn.classList.add('active');
+                document.getElementById('mapPickText').textContent = 'Đang bật chọn trên bản đồ (Click vị trí bất kỳ)';
+                map.getContainer().style.cursor = 'crosshair';
+            } else {
+                btn.classList.remove('active');
+                document.getElementById('mapPickText').textContent = 'Chọn vị trí trực tiếp trên bản đồ';
+                map.getContainer().style.cursor = '';
+            }
+        }
+
+        // ═══════════════════════════════════════
+        // AUTOCOMPLETE SEARCH (WITH RICH HOVER & PREVIEWS)
+        // ═══════════════════════════════════════
+        function onSearchInput(val) {
+            clearTimeout(searchTimeout);
+            const dd = document.getElementById('autocompleteDropdown');
+            if (val.trim().length < 2) {
+                dd.classList.remove('visible');
+                removeHoverPreviewMarker();
+                return;
+            }
+            dd.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:0.8rem;">⏳ Đang tìm kiếm địa chỉ chính xác...</div>';
+            dd.classList.add('visible');
+            searchTimeout = setTimeout(() => nominatimSearch(val.trim()), 350);
+        }
+
+        async function nominatimSearch(query) {
+            const dd = document.getElementById('autocompleteDropdown');
+            try {
+                const resp = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Ho Chi Minh City, Vietnam')}&format=json&limit=6&addressdetails=1`,
+                    { headers: { 'Accept-Language': 'vi' } }
+                );
+                const results = await resp.json();
+                currentAutocompleteResults = results;
+                if (results.length === 0) {
+                    dd.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:0.8rem;">Không tìm thấy địa điểm phù hợp</div>';
+                    return;
+                }
+
+                dd.innerHTML = results.map((r, i) => {
+                    const mainName = r.name || r.display_name.split(',')[0];
+                    const fullAddress = r.display_name;
+                    const lat = parseFloat(r.lat).toFixed(4);
+                    const lon = parseFloat(r.lon).toFixed(4);
+
+                    return `
+                <div class="autocomplete-item" id="ac-item-${i}"
+                     onmouseenter="onHoverAutocomplete(${i})"
+                     onmouseleave="onLeaveAutocomplete(${i})"
+                     onclick="selectAutocomplete(${i})">
+                    <div class="ac-header">
+                        <span class="ac-title">📍 ${mainName}</span>
+                        <span class="ac-coords">${lat}, ${lon}</span>
+                    </div>
+                    <div class="ac-full-address">${fullAddress}</div>
+                </div>
+            `;
+                }).join('');
+            } catch (e) {
+                dd.innerHTML = '<div style="padding:12px;text-align:center;color:var(--red);font-size:0.8rem;">Lỗi kết nối tìm kiếm</div>';
+            }
+        }
+
+        function onHoverAutocomplete(idx) {
+            const r = currentAutocompleteResults[idx];
+            if (!r) return;
+            const lat = parseFloat(r.lat);
+            const lon = parseFloat(r.lon);
+            const mainName = r.name || r.display_name.split(',')[0];
+
+            // Tạo preview marker trên bản đồ
+            removeHoverPreviewMarker();
+            hoverPreviewMarker = L.circleMarker([lat, lon], {
+                radius: 9, fillColor: '#8b5cf6', color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 0.8
+            }).addTo(map);
+            hoverPreviewMarker.bindTooltip(`📍 ${mainName}`, { permanent: true, direction: 'top', offset: [0, -10] }).openTooltip();
+            map.panTo([lat, lon], { animate: true, duration: 0.5 });
+        }
+
+        function onLeaveAutocomplete(idx) {
+            removeHoverPreviewMarker();
+        }
+
+        function removeHoverPreviewMarker() {
+            if (hoverPreviewMarker) {
+                map.removeLayer(hoverPreviewMarker);
+                hoverPreviewMarker = null;
+            }
+        }
+
+        function selectAutocomplete(idx) {
+            const r = currentAutocompleteResults[idx];
+            if (!r) return;
+            const lat = parseFloat(r.lat);
+            const lon = parseFloat(r.lon);
+            const mainName = r.name || r.display_name.split(',')[0];
+
+            removeHoverPreviewMarker();
+            document.getElementById('autocompleteDropdown').classList.remove('visible');
+            document.getElementById('locationSearch').value = '';
+
+            if (locationMode === 'depot') {
+                addDepot(mainName, lat, lon);
+            } else {
+                addDelivery(mainName, lat, lon);
+            }
+            map.setView([lat, lon], 15);
+        }
+
+        function onSearchKeydown(e) {
+            if (e.key === 'Enter') {
+                const dd = document.getElementById('autocompleteDropdown');
+                if (currentAutocompleteResults.length > 0) {
+                    selectAutocomplete(0);
+                }
+            }
+        }
+
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.search-wrapper')) {
+                document.getElementById('autocompleteDropdown')?.classList.remove('visible');
+                removeHoverPreviewMarker();
+            }
+        });
+
+        // ═══════════════════════════════════════
+        // MAP INITIALIZATION & INTERACTIVE CLICK POPUP
+        // ═══════════════════════════════════════
+        function initMap() {
+            map = L.map('map', { zoomControl: true }).setView([10.775, 106.695], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> | FLEX-VRP', maxZoom: 19,
+            }).addTo(map);
+
+            renderDepotList();
+
+            // Map Click Interaction (Popup with Buttons instead of auto-adding)
+            map.on('click', async e => {
+                const lat = parseFloat(e.latlng.lat.toFixed(5));
+                const lon = parseFloat(e.latlng.lng.toFixed(5));
+
+                // Quick reverse geocode for address name
+                let placeName = `Vị trí (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, { headers: { 'Accept-Language': 'vi' } });
+                    const d = await res.json();
+                    if (d && d.display_name) {
+                        placeName = d.name || d.display_name.split(',')[0];
+                    }
+                } catch (err) { }
+
+                const popupContent = `
+            <div class="custom-popup-box">
+                <div class="pop-title">📍 ${placeName}</div>
+                <div class="pop-coords">Tọa độ: ${lat}, ${lon}</div>
+                <div style="font-size:0.75rem;color:#475569;margin-bottom:6px;">Chọn thao tác:</div>
+                <div class="custom-popup-actions">
+                    <button class="pop-btn-depot" onclick="confirmAddDepot('${placeName.replace(/'/g, "\\'")}', ${lat}, ${lon})">🏭 Đặt làm Kho</button>
+                    <button class="pop-btn-deliv" onclick="confirmAddDelivery('${placeName.replace(/'/g, "\\'")}', ${lat}, ${lon})">📦 Thêm Điểm giao</button>
+                </div>
+            </div>
+        `;
+
+                L.popup()
+                    .setLatLng([lat, lon])
+                    .setContent(popupContent)
+                    .openOn(map);
+            });
+        }
+
+        function confirmAddDepot(name, lat, lon) {
+            map.closePopup();
+            addDepot(name, lat, lon);
+        }
+
+        function confirmAddDelivery(name, lat, lon) {
+            map.closePopup();
+            addDelivery(name, lat, lon);
+        }
+
+        // ═══════════════════════════════════════
+        // MULTIPLE DEPOTS MANAGEMENT (PERSISTENT DB)
+        // ═══════════════════════════════════════
+        async function addDepot(name, lat, lon) {
+            const newDepot = { id: `depot-${Date.now()}`, name, lat, lon, is_primary: depots.length === 0 };
+            depots.push(newDepot);
+            if (depots.length === 1) activeDepotIndex = 0;
+            renderDepotList();
+            refreshDepotMarkers();
+            updateOptimizeBtn();
+
+            // Lưu vào SQLite DB
+            try {
+                const resp = await fetch('/api/locations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, lat, lon, type: 'depot' })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    newDepot.db_id = data.id;
+                }
+            } catch (e) { console.error('Lỗi lưu kho vào DB:', e); }
+        }
+
+        function selectPrimaryDepot(index) {
+            activeDepotIndex = index;
+            depots.forEach((d, i) => d.is_primary = (i === index));
+            renderDepotList();
+            refreshDepotMarkers();
+        }
+
+        async function removeDepot(index, e) {
+            if (e) e.stopPropagation();
+            if (depots.length <= 1) {
+                alert('Cần ít nhất 1 Kho xuất phát!');
+                return;
+            }
+            const d = depots[index];
+            depots.splice(index, 1);
+            if (activeDepotIndex >= depots.length) activeDepotIndex = 0;
+            if (depots.length > 0) depots[activeDepotIndex].is_primary = true;
+            renderDepotList();
+            refreshDepotMarkers();
+            updateOptimizeBtn();
+
+            // Xóa khỏi SQLite DB
+            if (d && d.db_id) {
+                try {
+                    await fetch(`/api/locations/${d.db_id}`, { method: 'DELETE' });
+                } catch (err) { console.error('Lỗi xóa kho khỏi DB:', err); }
+            }
+        }
+
+        

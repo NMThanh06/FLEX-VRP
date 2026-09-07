@@ -1,0 +1,24 @@
+dB2BOrders();
+                    addBotChatMessage(`🎉 **Đã lưu đơn hàng \`${data.order.order_code}\`** cho khách **${name}** (${qty} thùng)!`);
+                }
+            } catch (e) {
+                alert('Lỗi lưu đơn hàng');
+            }
+        }
+
+        // ── Optimization Pipeline Execution ──
+        async function runB2BOptimization() {
+            const btn = document.getElementById('btnRunB2BOptimize');
+            const pBox = document.getElementById('b2bProgressBox');
+            const stageEl = document.getElementById('b2bProgressStage');
+            const pctEl = document.getElementById('b2bProgressPct');
+            const fillEl = document.getElementById('b2bProgressFill');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> Đang tối ưu...';
+            pBox.classList.add('visible');
+            pctEl.textContent = '5%';
+            fillEl.style.width = '5%';
+            stageEl.textContent = 'Khởi động mô hình...';
+
+            const days 

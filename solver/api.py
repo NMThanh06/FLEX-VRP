@@ -43,6 +43,7 @@ from db import (
     get_trips, get_trip, get_events, save_event, delete_event,
     get_all_ai_corrections,
     get_orders, save_order, save_customer, get_customers, get_optimization_run,
+    get_order_detail, update_order, update_customer, replace_order_items, get_products,
 )
 from ai_learner import (
     AILearner, EventsAnalyzer, lookup_vehicle_specs,
@@ -1164,6 +1165,49 @@ async def api_route_geometry(request: Request):
 async def api_b2b_orders(status: str = None):
     """Lấy danh sách đơn hàng B2B."""
     return {"success": True, "orders": get_orders(status)}
+
+
+@app.get("/api/b2b/products")
+async def api_b2b_products():
+    """Danh mục hàng hóa để chọn khi tạo/sửa đơn."""
+    return {"success": True, "products": get_products()}
+
+
+@app.get("/api/b2b/orders/{order_id}")
+async def api_b2b_order_detail(order_id: int):
+    order = get_order_detail(order_id)
+    if not order:
+        return JSONResponse({"error": "Không tìm thấy đơn hàng"}, status_code=404)
+    return {"success": True, "order": order}
+
+
+@app.put("/api/b2b/orders/{order_id}")
+async def api_b2b_update_order(order_id: int, request: Request):
+    """Lưu trực tiếp tên, địa chỉ, ngày, nguồn và các dòng hàng của một đơn."""
+    body = await request.json()
+    existing = get_order_detail(order_id)
+    if not existing:
+        return JSONResponse({"error": "Không tìm thấy đơn hàng"}, status_code=404)
+    customer_id = existing.get("customer_id")
+    if customer_id:
+        update_args = {
+            "name": str(body.get("customer_name", existing.get("customer_name") or "")).strip(),
+            "address": str(body.get("customer_address", existing.get("customer_address") or "")).strip(),
+            "phone": str(body.get("customer_phone", existing.get("customer_phone") or "")).strip(),
+        }
+        if "lat" in body and body["lat"] is not None:
+            update_args["lat"] = float(body["lat"])
+        if "lon" in body and body["lon"] is not None:
+            update_args["lon"] = float(body["lon"])
+        update_customer(customer_id, **update_args)
+    update_order(order_id,
+        delivery_date_preferred=body.get("delivery_date_preferred"),
+        source=body.get("source", existing.get("source") or "manual"),
+        notes=body.get("notes", existing.get("notes") or ""),
+    )
+    if isinstance(body.get("items"), list):
+        replace_order_items(order_id, body["items"])
+    return {"success": True, "order": get_order_detail(order_id)}
 
 
 @app.post("/api/b2b/orders")

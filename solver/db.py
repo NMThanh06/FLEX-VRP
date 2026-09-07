@@ -154,6 +154,21 @@ def init_db():
                 FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
             );
 
+            -- Danh mục hàng hóa dùng chung khi nhập/sửa đơn
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                business_unit TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL UNIQUE,
+                image_url TEXT DEFAULT '',
+                packaging TEXT DEFAULT '',
+                weight_per_unit_kg REAL DEFAULT 1.0,
+                dimensions_m TEXT DEFAULT '',
+                volume_per_unit_cbm REAL DEFAULT 0.01,
+                stock_quantity INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Lịch giao hàng (kết quả split delivery)
             CREATE TABLE IF NOT EXISTS delivery_schedule (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -647,6 +662,24 @@ def get_customer(customer_id: int) -> dict | None:
         conn.close()
 
 
+def update_customer(customer_id: int, **kwargs) -> dict | None:
+    """Cập nhật thông tin có thể chỉnh sửa của khách hàng."""
+    allowed = {'name', 'address', 'lat', 'lon', 'phone',
+               'preferred_time_start', 'preferred_time_end', 'notes'}
+    updates = {k: v for k, v in kwargs.items() if k in allowed}
+    if not updates:
+        return get_customer(customer_id)
+    conn = _get_conn()
+    try:
+        clause = ", ".join(f"{key}=?" for key in updates)
+        conn.execute(f"UPDATE customers SET {clause} WHERE id=?", [*updates.values(), customer_id])
+        conn.commit()
+        row = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
 # ═══════════════════════════════════════
 # PHASE II: ORDERS CRUD (mã 6 ký tự)
 # ═══════════════════════════════════════
@@ -703,14 +736,16 @@ def get_orders(status: str = None) -> list[dict]:
         if status:
             rows = conn.execute(
                 "SELECT o.*, c.name as customer_name, c.address as customer_address, "
-                "c.lat as customer_lat, c.lon as customer_lon "
+                "c.lat as customer_lat, c.lon as customer_lon, "
+                "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') FROM order_items WHERE order_id=o.id), '') AS item_summary "
                 "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
                 "WHERE o.status=? ORDER BY o.created_at DESC", (status,)
             ).fetchall()
         else:
             rows = conn.execute(
                 "SELECT o.*, c.name as customer_name, c.address as customer_address, "
-                "c.lat as customer_lat, c.lon as customer_lon "
+                "c.lat as customer_lat, c.lon as customer_lon, "
+                "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') FROM order_items WHERE order_id=o.id), '') AS item_summary "
                 "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
                 "ORDER BY o.created_at DESC"
             ).fetchall()
@@ -729,6 +764,68 @@ def get_order_by_code(order_code: str) -> dict | None:
             "WHERE o.order_code=?", (order_code.upper(),)
         ).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_order_detail(order_id: int) -> dict | None:
+    """Lấy đơn, khách hàng và toàn bộ dòng hàng để giao diện sửa trực tiếp."""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            """SELECT o.*, c.name AS customer_name, c.address AS customer_address,
+                      c.phone AS customer_phone, c.lat AS customer_lat, c.lon AS customer_lon
+               FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.id=?""",
+            (order_id,)
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result['items'] = [dict(item) for item in conn.execute(
+            "SELECT * FROM order_items WHERE order_id=? ORDER BY id", (order_id,)
+        ).fetchall()]
+        return result
+    finally:
+        conn.close()
+
+
+def replace_order_items(order_id: int, items: list[dict]) -> None:
+    """Thay toàn bộ dòng hàng rồi tính lại tổng lượng, khối lượng và thể tích."""
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
+        for item in items:
+            name = str(item.get('product_name') or item.get('name') or '').strip()
+            quantity = int(item.get('quantity') or 0)
+            if not name or quantity <= 0:
+                continue
+            weight = float(item.get('weight_per_unit_kg') or 1.0)
+            volume = float(item.get('volume_per_unit_cbm') or 0.01)
+            conn.execute(
+                """INSERT INTO order_items (order_id, product_name, quantity, weight_per_unit_kg,
+                   volume_per_unit_cbm, total_weight_kg, total_volume_cbm)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (order_id, name, quantity, weight, volume, quantity * weight, quantity * volume)
+            )
+        totals = conn.execute(
+            """SELECT COALESCE(SUM(quantity), 0), COALESCE(SUM(total_weight_kg), 0),
+                      COALESCE(SUM(total_volume_cbm), 0) FROM order_items WHERE order_id=?""",
+            (order_id,)
+        ).fetchone()
+        conn.execute(
+            """UPDATE orders SET total_quantity=?, total_weight_kg=?, total_volume_cbm=?, updated_at=?
+               WHERE id=?""",
+            (totals[0], totals[1], totals[2], datetime.now().isoformat(), order_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_products() -> list[dict]:
+    conn = _get_conn()
+    try:
+        return [dict(row) for row in conn.execute("SELECT * FROM products ORDER BY name").fetchall()]
     finally:
         conn.close()
 
@@ -1041,4 +1138,3 @@ def get_optimization_run(run_id: str) -> dict | None:
         return dict(row) if row else None
     finally:
         conn.close()
-

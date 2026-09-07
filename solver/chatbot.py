@@ -15,8 +15,8 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
 from db import (
-    save_order, save_order_item, get_orders, get_order_by_code,
-    save_customer, get_customers,
+    save_order, save_order_item, get_orders, get_order_by_code, update_order,
+    save_customer, get_customers, update_customer,
     save_chat_session, get_chat_session, update_chat_session,
     _generate_order_code,
 )
@@ -233,10 +233,10 @@ def call_llm(prompt: str, system_prompt: str = "", preferred_provider: str = "ge
 
 SYSTEM_ORDER_PROMPT = """
 Bạn là Trợ lý AI Điều phối Logistics B2B của hệ thống FLEX-VRP tại TP.HCM.
-Nhiệm vụ của bạn là bóc tách thông tin tạo đơn hàng hoặc trả lời thắc mắc của người dùng.
+Nhiệm vụ của bạn là bóc tách thông tin tạo đơn hàng, sửa đơn, tra cứu đơn, hoặc trả lời thắc mắc của người dùng.
 
 KHI NGƯỜI DÙNG MUỐN TẠO HOẶC BỔ SUNG ĐƠN HÀNG:
-Hãy trích xuất thông tin và trả về DUY NHẤT 1 chuỗi JSON (không kèm markdown thừa) theo cấu trúc:
+Trả về JSON:
 {
   "type": "create_order",
   "customer_name": "Tên khách hàng hoặc tiệm tạp hóa",
@@ -252,10 +252,28 @@ Hãy trích xuất thông tin và trả về DUY NHẤT 1 chuỗi JSON (không k
   "missing_fields": ["customer_address", ...] (liệt kê các trường bắt buộc còn thiếu: customer_name, customer_address, items)
 }
 
+KHI NGƯỜI DÙNG MUỐN TRA CỨU ĐƠN HÀNG (VD: Tìm đơn MT, tra cứu đơn 6K4U00):
+Trả về JSON:
+{
+  "type": "lookup_order",
+  "query": "Tên khách hàng hoặc mã đơn hàng"
+}
+
+KHI NGƯỜI DÙNG MUỐN SỬA ĐƠN HÀNG (VD: Đổi thành 100 thùng, sửa địa chỉ thành Q1):
+Trả về JSON:
+{
+  "type": "update_order",
+  "customer_name": "Tên khách hàng (nếu có)",
+  "updates": {
+    "quantity": 100,
+    "customer_address": "Q1"
+  }
+}
+
 Nếu người dùng chỉ chào hỏi hoặc hỏi chung, trả về JSON:
 {
   "type": "general_chat",
-  "reply_text": "Nội dung trả lời lịch sự, hướng dẫn người dùng cách tạo đơn hoặc nạp dữ liệu"
+  "reply_text": "Nội dung trả lời lịch sự"
 }
 """
 
@@ -452,6 +470,76 @@ def process_user_chat(message: str, session_id: str = "default",
                 "total_quantity": total_qty,
                 "total_weight_kg": total_wt
             }
+        }
+
+    elif parsed.get("type") == "lookup_order":
+        query = parsed.get("query", "").strip()
+        if not query:
+            return {"success": True, "reply": "Vui lòng cung cấp mã đơn hoặc tên khách hàng cần tra cứu.", "provider": provider_used, "action": "chat"}
+        
+        all_orders = get_orders()
+        found = []
+        for o in all_orders:
+            if query.lower() in o.get("order_code", "").lower() or query.lower() in o.get("customer_name", "").lower():
+                found.append(o)
+        
+        if not found:
+            return {"success": True, "reply": f"Không tìm thấy đơn hàng nào khớp với '{query}'.", "provider": provider_used, "action": "chat"}
+        
+        reply = f"🔍 **Đã tìm thấy {len(found)} đơn hàng khớp với '{query}':**\n"
+        for o in found[:5]: # Chỉ hiện 5 đơn gần nhất
+            reply += (
+                f"\n📦 **Mã đơn: `{o['order_code']}`**\n"
+                f"• Khách hàng: {o.get('customer_name', 'N/A')}\n"
+                f"• Số lượng: {o.get('total_quantity', 0)} thùng\n"
+                f"• Trạng thái: {o.get('status', 'pending')}\n"
+                f"• Ngày giao: {o.get('delivery_date_preferred', 'N/A')}\n"
+            )
+        
+        return {
+            "success": True,
+            "reply": reply,
+            "provider": provider_used,
+            "action": "order_lookup",
+            "order": found[0]
+        }
+
+    elif parsed.get("type") == "update_order":
+        c_name = parsed.get("customer_name", "")
+        updates = parsed.get("updates", {})
+        
+        # Tìm đơn hàng gần nhất của khách
+        all_orders = get_orders()
+        target_order = None
+        for o in reversed(all_orders):
+            if c_name.lower() in o.get("customer_name", "").lower():
+                target_order = o
+                break
+                
+        if not target_order:
+            return {"success": True, "reply": f"Không tìm thấy đơn hàng nào của khách '{c_name}' để sửa.", "provider": provider_used, "action": "chat"}
+            
+        # Cập nhật DB
+        reply = f"✏️ **Đã cập nhật đơn hàng `{target_order['order_code']}` của {c_name}:**\n"
+        
+        # Nếu có số lượng mới
+        if "quantity" in updates:
+            update_order(target_order["id"], total_quantity=int(updates["quantity"]))
+            reply += f"• Số lượng mới: {updates['quantity']} thùng/kiện\n"
+        
+        # Nếu có địa chỉ mới
+        if "customer_address" in updates and target_order.get("customer_id"):
+            update_customer(target_order["customer_id"], address=updates["customer_address"])
+            reply += f"• Địa chỉ mới: {updates['customer_address']}\n"
+            
+        reply += "\n✅ Thông tin đã được cập nhật thành công!"
+        
+        return {
+            "success": True,
+            "reply": reply,
+            "provider": provider_used,
+            "action": "order_updated",
+            "order": target_order
         }
 
     # Trường hợp hội thoại chung

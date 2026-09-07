@@ -44,23 +44,30 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
     if not run_id:
         run_id = f"opt_{uuid.uuid4().hex[:8]}"
     
-    # Ngày bắt đầu (mặc định Thứ Hai tuần tới hoặc hôm nay)
-    today = datetime.now().date()
-    # Tìm thứ Hai kế tiếp hoặc hôm nay nếu là ngày trong tuần
-    days_ahead = (0 - today.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    start_dt = today + timedelta(days=days_ahead)
-    if start_date:
-        try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
-        except Exception:
-            pass
-
-    date_list = [(start_dt + timedelta(days=i)).isoformat() for i in range(planning_days)]
-
-    # 1. Nạp dữ liệu
+    # 1. Nạp dữ liệu đơn hàng trước để lấy ngày
     orders_raw = get_orders()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # Lấy các ngày giao hàng từ đơn hàng (lớn hơn hoặc bằng hôm nay)
+    order_dates = set()
+    for o in orders_raw:
+        d = o.get("delivery_date_preferred")
+        if d and d >= today_str:
+            order_dates.add(d)
+    
+    sorted_dates = sorted(list(order_dates))
+    date_list = sorted_dates[:planning_days]
+    
+    if not date_list:
+        date_list = [today_str]
+        
+    planning_days = len(date_list)
+    
+    distant_orders_count = 0
+    if len(sorted_dates) > planning_days:
+        # Số đơn hàng thuộc các ngày xa hơn (không được lên lịch đợt này)
+        distant_orders_count = sum(1 for o in orders_raw if o.get("delivery_date_preferred") and o.get("delivery_date_preferred") > date_list[-1])
+        
     customers_raw = get_customers()
     vehicles_raw = get_vehicles()
     locations_raw = get_locations("depot")
@@ -171,22 +178,22 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
         })
 
     # 5. Chạy Matheuristic Framework
-    update_optimization_progress(run_id, 50, f"🔄 Khởi tạo GRASP với {len(stops)} điểm giao...")
-    time.sleep(0.15)
-    update_optimization_progress(run_id, 55, "🔄 Tối ưu tuyến đường (Reactive GRASP + VND Multi-Armed Bandit)...")
-    time.sleep(0.15)
-    update_optimization_progress(run_id, 62, "⚡ Đang chạy VND Multi-Armed Bandit...")
-    time.sleep(0.15)
-    update_optimization_progress(run_id, 68, "⚡ Mở rộng không gian nghiệm (LA-VNS Strategic Oscillation)...")
+    update_optimization_progress(run_id, 50, f"🔄 Khởi tạo GRASP ({len(stops)} điểm giao)...")
+    
+    def _math_progress(pct, stage):
+        mapped_pct = int(50 + (pct / 100.0) * 26)
+        update_optimization_progress(run_id, mapped_pct, stage)
+
     best_sol, route_pool, math_stats = run_matheuristic(
         stops=stops,
         vehicles=math_vehicles,
         num_days=planning_days,
-        grasp_iterations=8,
-        vnd_iterations=16,
-        vns_iterations=10,
+        grasp_iterations=5,
+        vnd_iterations=10,
+        vns_iterations=5,
         depot_lat=depot_lat,
-        depot_lon=depot_lon
+        depot_lon=depot_lon,
+        progress_callback=_math_progress,
     )
     update_optimization_progress(run_id, 78, "✅ Thuật toán hội tụ! Đang tính toán chi phí...")
     time.sleep(0.2)
@@ -255,8 +262,22 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
         routes_for_day = []
         for r in best_sol.routes:
             if r.day_index == d_idx and r.num_stops > 0:
+                import random
+                import string
+                waybill_code = "MVD-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+                
                 stops_detail = []
-                # Trạm xuất phát kho
+                raw_stops = []
+                
+                # Raw Depot
+                raw_stops.append({
+                    "step": 0,
+                    "name": depot_name,
+                    "type": "depot",
+                    "action": "Xuất phát"
+                })
+                
+                # Trạm xuất phát kho (merged)
                 stops_detail.append({
                     "step": 0,
                     "name": depot_name,
@@ -270,40 +291,109 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
                 prev_lat, prev_lon = depot_lat, depot_lon
 
                 for s_idx, st in enumerate(r.stops):
-                    seg_dist = haversine_distance(prev_lat, prev_lon, st.lat, st.lon) * 1.25
-                    seg_time_min = (seg_dist / 25.0) * 60.0
-                    current_time_dt += timedelta(minutes=int(seg_time_min))
-                    arr_str = current_time_dt.strftime("%H:%M")
-                    # Giao hàng 15 phút
-                    current_time_dt += timedelta(minutes=15)
-                    dep_str = current_time_dt.strftime("%H:%M")
+                    # Kiểm tra xem có gộp với trạm trước đó không (cùng toạ độ)
+                    last_stop = stops_detail[-1] if stops_detail and stops_detail[-1]["type"] == "customer" else None
+                    
+                    if last_stop and abs(last_stop["lat"] - st.lat) < 1e-5 and abs(last_stop["lon"] - st.lon) < 1e-5:
+                        # Gộp trạm
+                        if "deliveries" not in last_stop:
+                            last_stop["deliveries"] = [{
+                                "customer_name": last_stop["name"],
+                                "order_code": last_stop["order_code"],
+                                "quantity": last_stop["quantity"],
+                                "weight_kg": last_stop["weight_kg"]
+                            }]
+                        
+                        # Tìm xem có cùng tên khách không để cộng số lượng
+                        merged = False
+                        for d in last_stop["deliveries"]:
+                            if d["customer_name"] == st.customer_name:
+                                d["quantity"] += st.quantity
+                                d["weight_kg"] = round(d["weight_kg"] + st.weight_kg, 1)
+                                merged = True
+                                break
+                                
+                        if not merged:
+                            last_stop["deliveries"].append({
+                                "customer_name": st.customer_name,
+                                "order_code": st.order_code,
+                                "quantity": st.quantity,
+                                "weight_kg": round(st.weight_kg, 1)
+                            })
+                            
+                        # Nếu có nhiều khách khác nhau, đổi tên thành Nhiều Khách hàng
+                        if last_stop["name"] != "Nhiều khách hàng" and last_stop["name"] != st.customer_name:
+                            last_stop["name"] = "Nhiều khách hàng (cùng địa chỉ)"
+                            
+                        last_stop["quantity"] += st.quantity
+                        last_stop["weight_kg"] = round(last_stop["weight_kg"] + st.weight_kg, 1)
+                        
+                        # Thêm thời gian giao
+                        current_time_dt += timedelta(minutes=5)
+                        last_stop["etd"] = current_time_dt.strftime("%H:%M")
+                    else:
+                        seg_dist = haversine_distance(prev_lat, prev_lon, st.lat, st.lon) * 1.25
+                        seg_time_min = (seg_dist / 25.0) * 60.0
+                        current_time_dt += timedelta(minutes=int(seg_time_min))
+                        arr_str = current_time_dt.strftime("%H:%M")
+                        # Giao hàng 15 phút
+                        current_time_dt += timedelta(minutes=15)
+                        dep_str = current_time_dt.strftime("%H:%M")
+                        
+                        step_num = last_stop["step"] + 1 if last_stop else (s_idx + 1 if s_idx == 0 else stops_detail[-1]["step"] + 1)
+                        # Fix depot step logic: depot is step 0, first customer is step 1.
+                        # Wait, we want continuous numbering.
+                        real_step = stops_detail[-1]["step"] + 1 if stops_detail else 0
 
-                    stops_detail.append({
-                        "step": s_idx + 1,
-                        "name": st.customer_name,
-                        "order_code": st.order_code,
-                        "lat": st.lat,
-                        "lon": st.lon,
-                        "type": "customer",
-                        "quantity": st.quantity,
-                        "weight_kg": round(st.weight_kg, 1),
-                        "eta": arr_str,
-                        "etd": dep_str,
-                        "time_window": f"{st.time_start} - {st.time_end}"
-                    })
-                    prev_lat, prev_lon = st.lat, st.lon
+                        stops_detail.append({
+                            "step": real_step,
+                            "name": st.customer_name,
+                            "order_code": st.order_code,
+                            "lat": st.lat,
+                            "lon": st.lon,
+                            "type": "customer",
+                            "quantity": st.quantity,
+                            "weight_kg": round(st.weight_kg, 1),
+                            "eta": arr_str,
+                            "etd": dep_str,
+                            "time_window": f"{st.time_start} - {st.time_end}",
+                            "deliveries": [{
+                                "customer_name": st.customer_name,
+                                "order_code": st.order_code,
+                                "quantity": st.quantity,
+                                "weight_kg": round(st.weight_kg, 1)
+                            }]
+                        })
+                        prev_lat, prev_lon = st.lat, st.lon
+
+                        raw_stops.append({
+                            "step": s_idx + 1,
+                            "name": st.customer_name,
+                            "order_code": st.order_code,
+                            "quantity": st.quantity,
+                            "weight_kg": round(st.weight_kg, 1)
+                        })
 
                 # Về kho
                 return_dist = haversine_distance(prev_lat, prev_lon, depot_lat, depot_lon) * 1.25
                 current_time_dt += timedelta(minutes=int((return_dist / 25.0) * 60.0))
+                
+                end_step = stops_detail[-1]["step"] + 1 if stops_detail else 1
                 stops_detail.append({
-                    "step": len(r.stops) + 1,
+                    "step": end_step,
                     "name": f"Về {depot_name}",
                     "lat": depot_lat,
                     "lon": depot_lon,
                     "type": "depot",
                     "action": "Kết thúc hành trình",
                     "eta": current_time_dt.strftime("%H:%M")
+                })
+                
+                raw_stops.append({
+                    "step": len(r.stops) + 1,
+                    "name": f"Về {depot_name}",
+                    "type": "depot",
+                    "action": "Kết thúc"
                 })
 
                 routes_for_day.append({
@@ -316,7 +406,10 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
                     "distance_km": round(r.total_distance(), 1),
                     "time_min": round(r.total_time(), 1),
                     "cost_vnd": round(r.cost(), 0),
-                    "stops": stops_detail
+                    "waybill_code": waybill_code,
+                    "merged_stops": stops_detail,
+                    "raw_stops": raw_stops,
+                    "orders_count": sum(len(st.get("deliveries", [])) if "deliveries" in st else 1 for st in stops_detail if st["type"] == "customer")
                 })
 
         schedule_by_day.append({
@@ -325,6 +418,7 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
             "day_name": day_name,
             "routes": routes_for_day,
             "total_trips": len(routes_for_day),
+            "total_day_orders": sum(rt.get("orders_count", 0) for rt in routes_for_day),
             "total_day_load_kg": round(sum(rt["total_load_kg"] for rt in routes_for_day), 1),
             "total_day_dist_km": round(sum(rt["distance_km"] for rt in routes_for_day), 1)
         })
@@ -334,9 +428,10 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
         "success": True,
         "run_id": run_id,
         "planning_days": planning_days,
+        "distant_orders_count": distant_orders_count,
         "depot": {"name": depot_name, "lat": depot_lat, "lon": depot_lon},
         "kpis": {
-            "total_orders": len(orders_raw),
+            "total_orders": sum(day["total_day_orders"] for day in schedule_by_day),
             "total_deliveries": len(assignments),
             "vehicles_used": opt_vehicles_used,
             "total_distance_km": opt_distance_km,

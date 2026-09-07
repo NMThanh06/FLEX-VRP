@@ -1,0 +1,70 @@
+res.schedule || !res.schedule.length) {
+                schedTabs.innerHTML = '';
+                schedCont.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Chưa có dữ liệu lịch trình</div>';
+                return;
+            }
+
+            schedTabs.innerHTML = res.schedule.map((day, idx) => `
+        <button class="res-subtab-btn ${idx === 0 ? 'active' : ''}" onclick="switchScheduleDay(${idx}, this)">
+            ${day.day_name} <br>
+            <span style="font-size:0.7rem;opacity:0.8;">${day.date}</span>
+        </button>
+    `).join('');
+
+            schedCont.innerHTML = res.schedule.map((day, dIdx) => {
+                if (!day.routes || day.routes.length === 0) {
+                    return `
+                <div class="schedule-day-card" id="schedDay_${dIdx}" style="display:${dIdx === 0 ? 'block' : 'none'};">
+                    <div class="schedule-day-header">
+                        <strong>📅 ${day.day_name} (${day.date})</strong>
+                        <span style="font-size:0.75rem;color:var(--text-dim);">Nghỉ giao / Không có chuyến</span>
+                    </div>
+                </div>
+            `;
+                }
+
+                const tripsHtml = day.routes.map((rt, rIdx) => {
+                    const stopsSummary = (rt.merged_stops || rt.stops).map(st => st.name).join(' ➔ ');
+                    return `
+                <div class="trip-item">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="trip-route-badge">🚛 ${rt.vehicle_name}</span>
+                            <span style="font-size:0.8rem;font-family:monospace;font-weight:bold;color:var(--accent-light);border:1px solid rgba(255,255,255,0.2);padding:2px 6px;border-radius:4px;">${rt.waybill_code || 'MVD-UNKNOWN'}</span>
+                        </div>
+                        <div style="font-size:0.75rem;color:var(--text-dim);display:flex;gap:12px;">
+                            <span>Tải: <strong>${rt.total_load_kg} / ${rt.capacity_kg} kg</strong> (${rt.load_percentage}%)</span>
+                            <span>Cự ly: <strong>${rt.distance_km} km</strong></span>
+                            <span>Chi phí: <strong>${(rt.cost_vnd || 0).toLocaleString()} đ</strong></span>
+                        </div>
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--text);line-height:1.4;margin-top:8px;">
+                        <strong>Hành trình:</strong> ${stopsSummary}
+                    </div>
+                    <div style="text-align:right;">
+                        <button class="btn-b2b" style="padding:4px 10px;font-size:0.72rem;" onclick="viewTripDetailOnMap(${dIdx}, ${rIdx})">
+                            🗺️ Xem Lộ Trình Trên Bản Đồ
+                        </button>
+                    </div>
+                </div>
+            `;
+                }).join('');
+
+                return `
+            <div class="schedule-day-card" id="schedDay_${dIdx}" style="display:${dIdx === 0 ? 'block' : 'none'};">
+                <div class="schedule-day-header">
+                    <div>
+                        <strong style="font-size:0.92rem;color:#fff;">📅 ${day.day_name}</strong>
+                        <span style="font-size:0.75rem;color:var(--text-dim);margin-left:8px;">(${day.date})</span>
+                    </div>
+                    <span class="badge" style="background:rgba(108,99,255,0.15);color:var(--accent-light);">
+                        ${day.total_day_orders || 0} đơn • ${day.total_trips} chuyến • ${day.total_day_dist_km} km • ${day.total_day_load_kg} kg
+                    </span>
+                </div>
+                ${tripsHtml}
+            </div>
+        `;
+            }).join('');
+
+            // Switch to schedule tab by default (khách hàng quan tâm lịch, không cần bảng phân tích)
+        
