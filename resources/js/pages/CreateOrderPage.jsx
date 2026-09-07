@@ -2,16 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Package, Calendar, Truck, ArrowRight, Info, CheckCircle2, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function CreateOrderPage() {
     const [warehouses, setWarehouses] = useState([]);
     const [products, setProducts] = useState([]);
     
+    const { user } = useAuth();
+    
     const [formData, setFormData] = useState({
         warehouse_id: '',
         time_window_start: '',
         time_window_end: '',
-        notes: ''
+        notes: '',
+        sender_name: user?.name || '',
+        sender_company: user?.company || '',
+        sender_address: user?.address || ''
     });
 
     const [cart, setCart] = useState([]); // Array of { product, quantity }
@@ -179,6 +185,46 @@ export default function CreateOrderPage() {
                     {/* Left Column: Form Fields */}
                     <div className="lg:col-span-2 space-y-6">
                         
+                        {/* Section: Thông tin Người gửi */}
+                        <div className="bg-white p-6 sm:p-8 rounded-xl border border-gray-200 shadow-sm">
+                            <h2 className="text-lg font-600 text-gray-900 mb-6 flex items-center gap-2">
+                                <Info className="text-blue-600" size={20} />
+                                Thông tin Người đặt / Người gửi
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-500 text-gray-700 mb-2">Họ và tên</label>
+                                    <input
+                                        type="text"
+                                        name="sender_name"
+                                        value={formData.sender_name}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-2.5 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-500 text-gray-700 mb-2">Tên Công ty</label>
+                                    <input
+                                        type="text"
+                                        name="sender_company"
+                                        value={formData.sender_company}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-2.5 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-sm"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-500 text-gray-700 mb-2">Địa chỉ</label>
+                                    <input
+                                        type="text"
+                                        name="sender_address"
+                                        value={formData.sender_address}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-2.5 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-sm"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Section: Thông tin Kho & Thời gian */}
                         <div className="bg-white p-6 sm:p-8 rounded-xl border border-gray-200 shadow-sm">
                             <h2 className="text-lg font-600 text-gray-900 mb-6 flex items-center gap-2">

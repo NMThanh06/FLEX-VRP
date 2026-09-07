@@ -16,12 +16,14 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6',
+            'company' => 'nullable|string|max:255',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'company' => $request->company,
             'role' => 'retailer', // Default role
         ]);
 
@@ -70,10 +72,19 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,'.$user->id,
             'password' => 'nullable|string|min:6',
+            'company' => 'nullable|string|max:255',
+            'address' => 'nullable|string',
         ]);
 
         $user->name = $request->name;
         $user->email = $request->email;
+        
+        if ($request->has('company')) {
+            $user->company = $request->company;
+        }
+        if ($request->has('address')) {
+            $user->address = $request->address;
+        }
         
         if ($request->filled('password')) {
             $user->password = Hash::make($request->password);

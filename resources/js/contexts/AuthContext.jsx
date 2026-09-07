@@ -34,9 +34,9 @@ export const AuthProvider = ({ children }) => {
         setUser(response.data.user);
     };
 
-    const register = async (name, email, password) => {
+    const register = async (name, email, password, company) => {
         await axios.get('/sanctum/csrf-cookie');
-        const response = await axios.post('/api/register', { name, email, password });
+        const response = await axios.post('/api/register', { name, email, password, company });
         setUser(response.data.user);
     };
 

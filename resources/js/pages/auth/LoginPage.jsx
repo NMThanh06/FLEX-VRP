@@ -159,20 +159,7 @@ export default function LoginPage() {
                         ))}
                     </ul>
                     
-                    <div className="mt-12 p-6 bg-blue-800/50 backdrop-blur-sm rounded-xl border border-blue-600/30">
-                        <p className="text-blue-100 italic">
-                            "FLEX-VRP đã giúp chúng tôi tiết kiệm hàng trăm giờ quy hoạch lộ trình mỗi tháng và cải thiện đáng kể sự hài lòng của đối tác B2B."
-                        </p>
-                        <div className="mt-4 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-700">
-                                HN
-                            </div>
-                            <div>
-                                <div className="text-white font-500 text-sm">Hoàng Nam</div>
-                                <div className="text-blue-200 text-xs">Giám đốc vận hành, Logistics Vietnam</div>
-                            </div>
-                        </div>
-                    </div>
+
                 </div>
             </div>
         </div>

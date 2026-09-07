@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Save, User, Mail, Lock } from 'lucide-react';
+import { Save, User, Mail, Lock, Building2, MapPin } from 'lucide-react';
 
 export default function ProfilePage() {
     const { user, updateProfile } = useAuth();
-    
     const [formData, setFormData] = useState({
         name: user?.name || '',
         email: user?.email || '',
+        company: user?.company || '',
+        address: user?.address || '',
         password: '',
     });
     
@@ -94,6 +95,44 @@ export default function ProfilePage() {
                                         required
                                         className="pl-10 w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
                                     />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Công ty / Doanh nghiệp
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Building2 className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        name="company"
+                                        value={formData.company}
+                                        onChange={handleChange}
+                                        className="pl-10 w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                                        placeholder="Tên công ty của bạn..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Địa chỉ
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 pt-3 pointer-events-none">
+                                        <MapPin className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <textarea
+                                        name="address"
+                                        value={formData.address}
+                                        onChange={handleChange}
+                                        rows="2"
+                                        className="pl-10 w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all resize-y"
+                                        placeholder="Địa chỉ cụ thể..."
+                                    ></textarea>
                                 </div>
                             </div>
 
