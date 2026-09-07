@@ -10,9 +10,11 @@ import MyOrdersPage from './pages/MyOrdersPage';
 import RoutingOptimizationPage from './pages/RoutingOptimizationPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import ProfilePage from './pages/ProfilePage';
+import WarehouseManagementPage from './pages/WarehouseManagementPage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import '../css/app.css';
+import './bootstrap';
 
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -35,13 +37,18 @@ function App() {
                             </ProtectedRoute>
                         } />
                         <RouterRoute path="/routing" element={
-                            <ProtectedRoute allowedRoles={['admin']}>
+                            <ProtectedRoute allowedRoles={['admin', 'carrier']}>
                                 <RoutingOptimizationPage />
                             </ProtectedRoute>
                         } />
                         <RouterRoute path="/admin-dashboard" element={
-                            <ProtectedRoute allowedRoles={['admin']}>
+                            <ProtectedRoute allowedRoles={['admin', 'carrier']}>
                                 <AdminDashboardPage />
+                            </ProtectedRoute>
+                        } />
+                        <RouterRoute path="/warehouses-management" element={
+                            <ProtectedRoute allowedRoles={['admin', 'carrier']}>
+                                <WarehouseManagementPage />
                             </ProtectedRoute>
                         } />
                         <RouterRoute path="/profile" element={

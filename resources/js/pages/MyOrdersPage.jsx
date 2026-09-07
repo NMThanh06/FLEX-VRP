@@ -1,25 +1,43 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Package, Search, Filter, Eye, Clock, CheckCircle, Truck, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const mockOrders = [
-    { id: 'ORD-2026-001', pickup: 'Kho A, Quận 7, TP.HCM', delivery: 'Kho B, Biên Hòa, Đồng Nai', date: '30/08/2026', status: 'pending', items: '120 kg, Hàng tiêu chuẩn' },
-    { id: 'ORD-2026-002', pickup: 'Cảng Cát Lái, Thủ Đức', delivery: 'KCN Sóng Thần, Bình Dương', date: '29/08/2026', status: 'routing', items: '450 kg, Hàng cồng kềnh' },
-    { id: 'ORD-2026-003', pickup: 'KCN Tân Tạo, Bình Tân', delivery: 'Kho C, Quận 9, TP.HCM', date: '28/08/2026', status: 'delivering', items: '50 kg, Hàng dễ vỡ' },
-    { id: 'ORD-2026-004', pickup: 'Sân bay Tân Sơn Nhất', delivery: 'Quận 1, TP.HCM', date: '27/08/2026', status: 'completed', items: '15 kg, Hàng tiêu chuẩn' },
-];
 
 const StatusBadge = ({ status }) => {
     switch (status) {
         case 'pending': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-gray-100 text-gray-700"><Clock size={12} /> Chờ xử lý</span>;
-        case 'routing': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-purple-100 text-purple-700"><Package size={12} /> Đang lên tuyến</span>;
-        case 'delivering': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-blue-100 text-blue-700"><Truck size={12} /> Đang giao</span>;
-        case 'completed': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-green-100 text-green-700"><CheckCircle size={12} /> Đã hoàn thành</span>;
-        default: return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-red-100 text-red-700"><AlertCircle size={12} /> Lỗi</span>;
+        case 'optimizing': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-purple-100 text-purple-700"><Package size={12} /> Đang tính toán</span>;
+        case 'scheduled': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-blue-100 text-blue-700"><Truck size={12} /> Đã lên lịch</span>;
+        case 'in_transit': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-yellow-100 text-yellow-700"><Truck size={12} /> Đang giao</span>;
+        case 'delivered': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-green-100 text-green-700"><CheckCircle size={12} /> Hoàn thành</span>;
+        default: return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-500 bg-gray-100 text-gray-700">{status}</span>;
     }
 };
 
+const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    // Fix Safari/iOS issue with date strings containing spaces
+    const safeString = dateString.replace(' ', 'T');
+    const date = new Date(safeString);
+    return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString('vi-VN');
+};
+
 export default function MyOrdersPage() {
+    const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('/api/orders')
+            .then(res => res.json())
+            .then(data => {
+                setOrders(data);
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error("Error fetching orders", err);
+                setLoading(false);
+            });
+    }, []);
+
     return (
         <div className="bg-gray-50 min-h-[calc(100vh-64px)] py-10 px-4 sm:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">
@@ -57,31 +75,44 @@ export default function MyOrdersPage() {
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 font-600">
                                     <th className="px-6 py-4">Mã đơn</th>
-                                    <th className="px-6 py-4">Điểm lấy hàng</th>
-                                    <th className="px-6 py-4">Điểm giao hàng</th>
-                                    <th className="px-6 py-4">Thông tin hàng</th>
-                                    <th className="px-6 py-4">Ngày yêu cầu</th>
+                                    <th className="px-6 py-4">Kho lấy hàng</th>
+                                    <th className="px-6 py-4">Chi tiết hàng</th>
+                                    <th className="px-6 py-4">Khung giờ nhận</th>
                                     <th className="px-6 py-4">Trạng thái</th>
                                     <th className="px-6 py-4 text-right">Thao tác</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {mockOrders.map((order) => (
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                                            Đang tải dữ liệu...
+                                        </td>
+                                    </tr>
+                                ) : orders.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                                            Bạn chưa có đơn hàng nào.
+                                        </td>
+                                    </tr>
+                                ) : orders.map((order) => (
                                     <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-600 text-gray-900">
-                                            {order.id}
+                                            {order.order_code}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            <div className="max-w-[200px] truncate" title={order.pickup}>{order.pickup}</div>
+                                            <div className="max-w-[200px] truncate" title={order.warehouse?.name}>
+                                                {order.warehouse?.name || 'N/A'}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            <div className="max-w-[200px] truncate" title={order.delivery}>{order.delivery}</div>
+                                            {order.items?.length || 0} SP - {order.total_weight_kg} kg
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            {order.items}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            {order.date}
+                                            <div className="text-xs">
+                                                {formatDate(order.time_window_start)} <br/>
+                                                {`-> ${formatDate(order.time_window_end)}`}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <StatusBadge status={order.status} />
@@ -97,9 +128,9 @@ export default function MyOrdersPage() {
                         </table>
                     </div>
                     
-                    {/* Pagination */}
+                    {/* Pagination (Mocked for now) */}
                     <div className="p-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
-                        <div>Hiển thị 1 - 4 của 4 đơn hàng</div>
+                        <div>Hiển thị {orders.length} đơn hàng</div>
                         <div className="flex items-center gap-1">
                             <button className="px-3 py-1 border border-gray-200 rounded text-gray-400 cursor-not-allowed">Trước</button>
                             <button className="px-3 py-1 bg-blue-50 text-blue-700 font-600 border border-blue-200 rounded">1</button>

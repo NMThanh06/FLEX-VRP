@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Truck, ChevronDown, User, LogOut } from 'lucide-react';
+import { Menu, X, Truck, ChevronDown, User, LogOut, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function Navbar() {
@@ -8,6 +8,7 @@ export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const dropdownRef = useRef(null);
 
     // Xử lý click ra ngoài dropdown
@@ -28,10 +29,16 @@ export default function Navbar() {
         if (user) {
             links.push({ label: 'Đơn của tôi', href: '/my-orders' });
             links.push({ label: 'Đặt hàng', href: '/order' });
-            
-            if (user.role === 'admin') {
-                links.push({ label: 'Tối ưu lộ trình', href: '/routing' });
+            if (user.role === 'admin' || user.role === 'carrier') {
                 links.push({ label: 'Dashboard', href: '/admin-dashboard' });
+            }
+            
+            if (user.role === 'admin' || user.role === 'carrier') {
+                links.push({ label: 'Tối ưu lộ trình', href: '/routing' });
+            }
+
+            if (user.role === 'carrier') {
+                links.push({ label: 'Quản lý Kho', href: '/warehouses-management' });
             }
         }
         return links;
@@ -45,6 +52,19 @@ export default function Navbar() {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    const handleLogout = async () => {
+        setIsProfileOpen(false);
+        setIsOpen(false);
+        setIsLoggingOut(true);
+        try {
+            await logout();
+        } catch (error) {
+            console.error("Logout failed", error);
+        } finally {
+            setIsLoggingOut(false);
+        }
+    };
+
     return (
         <header
             className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${
@@ -53,6 +73,14 @@ export default function Navbar() {
                     : 'bg-white border-b border-gray-200'
             }`}
         >
+            {/* Loading Overlay for Logout */}
+            {isLoggingOut && (
+                <div className="fixed inset-0 bg-white/70 backdrop-blur-sm z-[100] flex flex-col items-center justify-center">
+                    <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+                    <p className="text-lg font-600 text-gray-800">Đang đăng xuất...</p>
+                </div>
+            )}
+
             <div className="max-w-7xl mx-auto px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
 
@@ -105,10 +133,8 @@ export default function Navbar() {
                                             Trang cá nhân
                                         </Link>
                                         <button
-                                            onClick={() => {
-                                                setIsProfileOpen(false);
-                                                logout();
-                                            }}
+                                            onClick={handleLogout}
+                                            disabled={isLoggingOut}
                                             className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left transition-colors"
                                         >
                                             <LogOut size={16} />
@@ -172,10 +198,8 @@ export default function Navbar() {
                                         Trang cá nhân
                                     </Link>
                                     <button
-                                        onClick={() => {
-                                            setIsOpen(false);
-                                            logout();
-                                        }}
+                                        onClick={handleLogout}
+                                        disabled={isLoggingOut}
                                         className="flex items-center gap-2 text-sm font-500 text-red-600 py-2.5 text-left"
                                     >
                                         <LogOut size={18} />
