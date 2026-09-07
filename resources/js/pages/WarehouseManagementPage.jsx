@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, Edit2, Trash2, MapPin, Package, AlertCircle, X, Check } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Package, AlertCircle, X, Check, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
@@ -30,6 +30,18 @@ export default function WarehouseManagementPage() {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState(null);
     const [products, setProducts] = useState([]);
     
+    // Warehouse Search & Pagination
+    const [warehouseSearch, setWarehouseSearch] = useState('');
+    const [warehouseStatus, setWarehouseStatus] = useState('all');
+    const [warehousePage, setWarehousePage] = useState(1);
+    const [warehousePagination, setWarehousePagination] = useState({ current_page: 1, last_page: 1, total: 0 });
+
+    // Product Search & Pagination
+    const [productSearch, setProductSearch] = useState('');
+    const [productStatus, setProductStatus] = useState('all');
+    const [productPage, setProductPage] = useState(1);
+    const [productPagination, setProductPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
+    
     const [loadingWarehouses, setLoadingWarehouses] = useState(true);
     const [loadingProducts, setLoadingProducts] = useState(false);
 
@@ -47,10 +59,19 @@ export default function WarehouseManagementPage() {
     const fetchWarehouses = async () => {
         setLoadingWarehouses(true);
         try {
-            const res = await axios.get('/api/management/warehouses');
-            setWarehouses(res.data);
-            if (res.data.length > 0 && !selectedWarehouseId) {
-                setSelectedWarehouseId(res.data[0].id);
+            let url = `/api/management/warehouses?page=${warehousePage}`;
+            if (warehouseSearch) url += `&search=${encodeURIComponent(warehouseSearch)}`;
+            if (warehouseStatus !== 'all') url += `&status=${warehouseStatus}`;
+
+            const res = await axios.get(url);
+            setWarehouses(res.data.data);
+            setWarehousePagination({
+                current_page: res.data.current_page,
+                last_page: res.data.last_page,
+                total: res.data.total
+            });
+            if (res.data.data.length > 0 && !selectedWarehouseId) {
+                setSelectedWarehouseId(res.data.data[0].id);
             }
         } catch (error) {
             console.error("Error fetching warehouses", error);
@@ -60,30 +81,44 @@ export default function WarehouseManagementPage() {
     };
 
     useEffect(() => {
+        // Reset to page 1 when search or filter changes
+        setWarehousePage(1);
+    }, [warehouseSearch, warehouseStatus]);
+
+    useEffect(() => {
         fetchWarehouses();
-    }, []);
+    }, [warehousePage, warehouseSearch, warehouseStatus]);
 
     // Fetch Products when warehouse changes
-    useEffect(() => {
-        let isMounted = true;
-        if (selectedWarehouseId) {
-            setLoadingProducts(true);
-            axios.get(`/api/management/products?warehouse_id=${selectedWarehouseId}`)
-                .then(res => {
-                    if (isMounted) {
-                        setProducts(res.data);
-                        setLoadingProducts(false);
-                    }
-                })
-                .catch(err => {
-                    if (isMounted) {
-                        console.error("Error fetching products", err);
-                        setLoadingProducts(false);
-                    }
-                });
+    const fetchProducts = async () => {
+        if (!selectedWarehouseId) return;
+        setLoadingProducts(true);
+        try {
+            let url = `/api/management/products?warehouse_id=${selectedWarehouseId}&page=${productPage}`;
+            if (productSearch) url += `&search=${encodeURIComponent(productSearch)}`;
+            if (productStatus !== 'all') url += `&status=${productStatus}`;
+
+            const res = await axios.get(url);
+            setProducts(res.data.data);
+            setProductPagination({
+                current_page: res.data.current_page,
+                last_page: res.data.last_page,
+                total: res.data.total
+            });
+            setLoadingProducts(false);
+        } catch (err) {
+            console.error("Error fetching products", err);
+            setLoadingProducts(false);
         }
-        return () => { isMounted = false; };
-    }, [selectedWarehouseId]);
+    };
+
+    useEffect(() => {
+        setProductPage(1);
+    }, [productSearch, productStatus, selectedWarehouseId]);
+
+    useEffect(() => {
+        fetchProducts();
+    }, [selectedWarehouseId, productPage, productSearch, productStatus]);
 
 
     // ==========================================
@@ -170,10 +205,7 @@ export default function WarehouseManagementPage() {
             }
             setProductModalOpen(false);
             // Refresh products
-            setLoadingProducts(true);
-            const res = await axios.get(`/api/management/products?warehouse_id=${selectedWarehouseId}`);
-            setProducts(res.data);
-            setLoadingProducts(false);
+            fetchProducts();
         } catch (error) {
             alert("Lỗi lưu sản phẩm: " + (error.response?.data?.message || "Lỗi không xác định"));
         }
@@ -183,7 +215,7 @@ export default function WarehouseManagementPage() {
         if (!window.confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${product.name}"?`)) return;
         try {
             await axios.delete(`/api/management/products/${product.id}`);
-            setProducts(products.filter(p => p.id !== product.id));
+            fetchProducts();
         } catch (error) {
             alert("Lỗi xóa sản phẩm: " + (error.response?.data?.message || "Lỗi không xác định"));
         }
@@ -217,6 +249,28 @@ export default function WarehouseManagementPage() {
                             >
                                 <Plus size={16} /> Thêm kho
                             </button>
+                        </div>
+                        
+                        <div className="flex gap-2 mb-4">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-2.5 top-2 text-gray-400" size={16} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Tìm kho..." 
+                                    value={warehouseSearch}
+                                    onChange={e => setWarehouseSearch(e.target.value)}
+                                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <select 
+                                value={warehouseStatus}
+                                onChange={e => setWarehouseStatus(e.target.value)}
+                                className="text-sm border border-gray-300 rounded-md outline-none focus:border-blue-500 px-2 py-1.5 bg-white"
+                            >
+                                <option value="all">Tất cả</option>
+                                <option value="active">Hoạt động</option>
+                                <option value="inactive">Tạm khóa</option>
+                            </select>
                         </div>
 
                         {loadingWarehouses ? (
@@ -255,6 +309,23 @@ export default function WarehouseManagementPage() {
                                         </div>
                                     </div>
                                 ))}
+
+                                {/* Warehouse Pagination */}
+                                {warehousePagination.last_page > 1 && (
+                                    <div className="flex items-center justify-between pt-2">
+                                        <button 
+                                            disabled={warehousePage === 1}
+                                            onClick={() => setWarehousePage(warehousePage - 1)}
+                                            className="p-1 rounded bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                        ><ChevronLeft size={16}/></button>
+                                        <span className="text-sm text-gray-600">Trang {warehousePagination.current_page} / {warehousePagination.last_page}</span>
+                                        <button 
+                                            disabled={warehousePage === warehousePagination.last_page}
+                                            onClick={() => setWarehousePage(warehousePage + 1)}
+                                            className="p-1 rounded bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                                        ><ChevronRight size={16}/></button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -278,6 +349,28 @@ export default function WarehouseManagementPage() {
                                         >
                                             <Plus size={16} /> Thêm sản phẩm
                                         </button>
+                                    </div>
+
+                                    <div className="flex gap-4 mb-6">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                            <input 
+                                                type="text" 
+                                                placeholder="Tìm kiếm sản phẩm theo tên hoặc SKU..." 
+                                                value={productSearch}
+                                                onChange={e => setProductSearch(e.target.value)}
+                                                className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <select 
+                                            value={productStatus}
+                                            onChange={e => setProductStatus(e.target.value)}
+                                            className="text-sm border border-gray-300 rounded-md outline-none focus:border-blue-500 px-3 py-2 bg-white"
+                                        >
+                                            <option value="all">Tất cả trạng thái</option>
+                                            <option value="active">Đang bán</option>
+                                            <option value="inactive">Ngừng bán</option>
+                                        </select>
                                     </div>
 
                                     {loadingProducts ? (
@@ -329,6 +422,41 @@ export default function WarehouseManagementPage() {
                                                     ))}
                                                 </tbody>
                                             </table>
+                                            
+                                            {/* Product Pagination */}
+                                            {productPagination.last_page > 1 && (
+                                                <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-4">
+                                                    <span className="text-sm text-gray-500">
+                                                        Hiển thị {(productPagination.current_page - 1) * 10 + 1} - {Math.min(productPagination.current_page * 10, productPagination.total)} trong {productPagination.total} sản phẩm
+                                                    </span>
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            disabled={productPage === 1}
+                                                            onClick={() => setProductPage(productPage - 1)}
+                                                            className="px-3 py-1.5 rounded bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 text-sm font-500 flex items-center gap-1"
+                                                        ><ChevronLeft size={16}/> Trước</button>
+                                                        
+                                                        {/* Simple page numbers */}
+                                                        <div className="flex gap-1 items-center px-2">
+                                                            {Array.from({ length: productPagination.last_page }, (_, i) => i + 1).map(page => (
+                                                                <button
+                                                                    key={page}
+                                                                    onClick={() => setProductPage(page)}
+                                                                    className={`w-8 h-8 flex items-center justify-center rounded text-sm ${page === productPage ? 'bg-blue-50 text-blue-700 font-600 border border-blue-200' : 'text-gray-600 hover:bg-gray-50 border border-transparent'}`}
+                                                                >
+                                                                    {page}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+
+                                                        <button 
+                                                            disabled={productPage === productPagination.last_page}
+                                                            onClick={() => setProductPage(productPage + 1)}
+                                                            className="px-3 py-1.5 rounded bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 text-sm font-500 flex items-center gap-1"
+                                                        >Sau <ChevronRight size={16}/></button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </>

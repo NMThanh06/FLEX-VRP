@@ -37,7 +37,7 @@ function App() {
                             </ProtectedRoute>
                         } />
                         <RouterRoute path="/routing" element={
-                            <ProtectedRoute allowedRoles={['admin']}>
+                            <ProtectedRoute allowedRoles={['admin', 'carrier']}>
                                 <RoutingOptimizationPage />
                             </ProtectedRoute>
                         } />

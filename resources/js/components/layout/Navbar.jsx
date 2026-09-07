@@ -32,7 +32,7 @@ export default function Navbar() {
                 links.push({ label: 'Dashboard', href: '/admin-dashboard' });
             }
             
-            if (user.role === 'admin') {
+            if (user.role === 'admin' || user.role === 'carrier') {
                 links.push({ label: 'Tối ưu lộ trình', href: '/routing' });
             }
 

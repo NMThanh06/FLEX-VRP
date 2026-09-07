@@ -15,13 +15,33 @@ class ManagementController extends Controller
 
     public function getWarehouses(Request $request)
     {
-        // Allow optional filtering by carrier (user_id) if we want to restrict carriers to their own warehouses
         $user = $request->user();
+        $query = Warehouse::withCount('orders');
+
+        // Check ownership if carrier
         if ($user->role === 'carrier') {
-            $warehouses = Warehouse::withCount('orders')->where('user_id', $user->id)->get();
-        } else {
-            $warehouses = Warehouse::withCount('orders')->get();
+            $query->where('user_id', $user->id);
         }
+
+        // Search by name or address
+        if ($search = $request->query('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('address', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by status
+        $status = $request->query('status');
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        $perPage = $request->query('per_page', 5); // Default 5 items per page for Warehouses
+        $warehouses = $query->paginate($perPage);
+
         return response()->json($warehouses);
     }
 
@@ -114,7 +134,26 @@ class ManagementController extends Controller
             }
         }
 
-        return response()->json($query->get());
+        // Search by name or sku
+        if ($search = $request->query('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('sku', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by status
+        $status = $request->query('status');
+        if ($status === 'active') {
+            $query->where('is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        $perPage = $request->query('per_page', 10); // Default 10 items per page for Products
+        $products = $query->paginate($perPage);
+
+        return response()->json($products);
     }
 
     public function storeProduct(Request $request)
