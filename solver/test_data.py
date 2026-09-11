@@ -11,6 +11,7 @@ Kịch bản MVP:
 """
 
 import sys
+import random
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -150,25 +151,30 @@ def seed_b2b_test_data():
         print(f"  ✅ Xe#{vid}: {v['name']} ({v['capacity_kg']}kg, {v['capacity_cbm']}m³)")
 
     # ═══════════════════════════════════════
-    # 4. ORDERS (10 đơn hàng)
+    # 4. ORDERS (10 đơn hàng với Ngày đặt hàng)
     # ═══════════════════════════════════════
-    print("\n[4/4] Tạo 10 đơn hàng...")
+    print("\n[4/4] Tạo 10 đơn hàng với Ngày Đặt Hàng...")
 
-    # Ngày bắt đầu = thứ Hai tuần tới
+    # Tạo mốc ngày đặt hàng lùi về quá khứ (từ 4 ngày trước đến hôm nay)
+    # kèm thời gian ngẫu nhiên trong ngày (HH:MM)
     today = datetime.now().date()
-    days_ahead = 7 - today.weekday()  # Thứ Hai tuần tới
-    if days_ahead <= 0:
-        days_ahead += 7
-    start_date = today + timedelta(days=days_ahead)
-    date_strs = [(start_date + timedelta(days=i)).isoformat() for i in range(5)]
-    print(f"  📅 Horizon: {date_strs[0]} (T2) → {date_strs[4]} (T6)")
+    days_back_list = [4, 4, 3, 3, 2, 2, 1, 1, 0, 0]
+    
+    order_datetime_strs = []
+    for d_back in days_back_list:
+        order_d = today - timedelta(days=d_back)
+        h = random.randint(7, 18)
+        m = random.choice([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55])
+        order_datetime_strs.append(f"{order_d.isoformat()} {h:02d}:{m:02d}")
+
+    print(f"  📅 Khoảng ngày đặt: {order_datetime_strs[0].split()[0]} (-4 ngày) → {order_datetime_strs[-1].split()[0]} (hôm nay)")
 
     orders_config = [
         # ── ĐƠN LỚN (cần Split Delivery) ──
         {
             "customer_idx": 2,  # Đại lý Thực phẩm Minh (Q5)
             "time_start": "07:00", "time_end": "11:00",
-            "preferred_date": date_strs[0],
+            "order_date": order_datetime_strs[0],
             "notes": "Đơn lớn - cần chia 3 ngày giao",
             "items": [
                 {"name": "Thùng mì gói Hảo Hảo", "qty": 100, "wt": 5.0, "vol": 0.04, "heavy": True},
@@ -179,7 +185,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 4,  # Siêu thị Mini Thanh (Bình Thạnh)
             "time_start": "08:00", "time_end": "17:00",
-            "preferred_date": date_strs[0],
+            "order_date": order_datetime_strs[1],
             "notes": "Đơn lớn - cần chia 2 ngày giao",
             "items": [
                 {"name": "Thùng bia Tiger", "qty": 120, "wt": 9.0, "vol": 0.06, "heavy": True},
@@ -191,7 +197,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 0,  # Tạp hóa Chị Lan (Q1)
             "time_start": "08:00", "time_end": "12:00",
-            "preferred_date": date_strs[0],
+            "order_date": order_datetime_strs[2],
             "notes": "Giao buổi sáng",
             "items": [
                 {"name": "Thùng nước suối Lavie", "qty": 30, "wt": 6.0, "vol": 0.03},
@@ -202,7 +208,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 1,  # Shop Mỹ Phẩm Hương (Q3)
             "time_start": "09:00", "time_end": "17:00",
-            "preferred_date": date_strs[1],
+            "order_date": order_datetime_strs[3],
             "notes": "Hàng dễ vỡ, xếp cẩn thận",
             "items": [
                 {"name": "Thùng kem dưỡng da", "qty": 40, "wt": 0.5, "vol": 0.008, "fragile": True},
@@ -212,7 +218,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 3,  # Cửa hàng Tiện Lợi 24h (Q10)
             "time_start": "08:00", "time_end": "22:00",
-            "preferred_date": date_strs[1],
+            "order_date": order_datetime_strs[4],
             "notes": "Giao giờ nào cũng được",
             "items": [
                 {"name": "Thùng snack Pringles", "qty": 50, "wt": 1.5, "vol": 0.015},
@@ -222,7 +228,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 5,  # Tạp hóa Bà Hai (Phú Nhuận)
             "time_start": "07:30", "time_end": "12:00",
-            "preferred_date": date_strs[2],
+            "order_date": order_datetime_strs[5],
             "notes": "Hẻm nhỏ, chỉ xe 1T",
             "items": [
                 {"name": "Thùng đường Biên Hòa", "qty": 25, "wt": 10.0, "vol": 0.03, "heavy": True},
@@ -235,7 +241,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 0,  # Tạp hóa Chị Lan (Q1) — đơn bổ sung
             "time_start": "08:00", "time_end": "12:00",
-            "preferred_date": date_strs[2],
+            "order_date": order_datetime_strs[6],
             "notes": "Đơn bổ sung, gom chung xe",
             "items": [
                 {"name": "Thùng giấy vệ sinh", "qty": 10, "wt": 2.0, "vol": 0.05},
@@ -245,7 +251,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 1,  # Shop Mỹ Phẩm Hương (Q3) — đơn nhỏ
             "time_start": "09:00", "time_end": "17:00",
-            "preferred_date": date_strs[3],
+            "order_date": order_datetime_strs[7],
             "notes": "Đơn nhỏ, gom chung",
             "items": [
                 {"name": "Thùng son môi", "qty": 15, "wt": 0.3, "vol": 0.005, "fragile": True},
@@ -254,7 +260,7 @@ def seed_b2b_test_data():
         {
             "customer_idx": 3,  # Cửa hàng Tiện Lợi 24h (Q10) — đơn nhỏ
             "time_start": "08:00", "time_end": "22:00",
-            "preferred_date": date_strs[3],
+            "order_date": order_datetime_strs[8],
             "notes": "Gom chung xe",
             "items": [
                 {"name": "Thùng khăn giấy", "qty": 12, "wt": 1.0, "vol": 0.02},
@@ -264,8 +270,8 @@ def seed_b2b_test_data():
         {
             "customer_idx": 5,  # Tạp hóa Bà Hai (Phú Nhuận) — đơn nhỏ
             "time_start": "07:30", "time_end": "12:00",
-            "preferred_date": date_strs[4],
-            "notes": "Đơn nhỏ cuối tuần",
+            "order_date": order_datetime_strs[9],
+            "notes": "Đơn nhỏ mới đặt",
             "items": [
                 {"name": "Thùng muối I-ốt", "qty": 10, "wt": 5.0, "vol": 0.01},
             ]
@@ -281,7 +287,8 @@ def seed_b2b_test_data():
             status="confirmed",
             time_window_start=oc["time_start"],
             time_window_end=oc["time_end"],
-            delivery_date_preferred=oc["preferred_date"],
+            order_date=oc["order_date"],
+            delivery_date_preferred=oc["order_date"],
             notes=oc["notes"],
             source="test_data"
         )
@@ -303,7 +310,7 @@ def seed_b2b_test_data():
 
         print(f"  ✅ Đơn {order['order_code']}: {cust['name'][:20]} — "
               f"{total_qty} thùng, {len(oc['items'])} SP, "
-              f"giao {oc['preferred_date']}")
+              f"đặt lúc {oc['order_date']}")
 
     # ═══════════════════════════════════════
     # SUMMARY
@@ -313,7 +320,7 @@ def seed_b2b_test_data():
     print(f"  • Khách hàng: {stats['customers']}")
     print(f"  • Xe tải:     {stats['vehicles']}")
     print(f"  • Đơn hàng:   {stats['orders']} ({stats['order_items']} sản phẩm)")
-    print(f"  • Horizon:    {date_strs[0]} → {date_strs[4]} (5 ngày)")
+    print(f"  • Ngày đặt:   {order_datetime_strs[0]} → {order_datetime_strs[-1]}")
     print(f"{'=' * 60}\n")
 
     return stats

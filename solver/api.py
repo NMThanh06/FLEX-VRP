@@ -43,7 +43,7 @@ from db import (
     get_trips, get_trip, get_events, save_event, delete_event,
     get_all_ai_corrections,
     get_orders, save_order, save_customer, get_customers, get_optimization_run,
-    get_order_detail, update_order, update_customer, replace_order_items, get_products,
+    get_order_detail, update_order, delete_order, update_customer, replace_order_items, get_products,
 )
 from ai_learner import (
     AILearner, EventsAnalyzer, lookup_vehicle_specs,
@@ -71,6 +71,14 @@ ROAD_POLYLINES: dict = {}
 _DF_CACHE = None
 TRAFFIC_LIGHTS: list = []  # List of TrafficLight
 GEMINI_API_KEY: str = None
+_TRAFFIC_DATA_CACHE = {}
+
+
+def get_traffic_data_for_hour(hour: int):
+    global _TRAFFIC_DATA_CACHE
+    if hour not in _TRAFFIC_DATA_CACHE:
+        _TRAFFIC_DATA_CACHE[hour] = load_traffic_data(PARQUET_PATH, hour) if PARQUET_PATH else _get_sample_traffic_data(hour)
+    return _TRAFFIC_DATA_CACHE[hour]
 
 
 def _load_env():
@@ -1062,9 +1070,8 @@ async def api_route_geometry(request: Request):
     if len(waypoints) < 2:
         return JSONResponse({"error": "Cần ít nhất 2 waypoints"}, status_code=400)
 
-    # Load traffic data cho khung giờ
-    traffic_data = load_traffic_data(PARQUET_PATH, target_hour) if PARQUET_PATH else _get_sample_traffic_data(target_hour)
-    avg_congestion = compute_average_congestion(traffic_data)
+    # Khung giờ mặc định nếu waypoint không có ETA
+    default_hour = target_hour
 
     segments = []
     all_route_lights = []
@@ -1074,6 +1081,19 @@ async def api_route_geometry(request: Request):
         wp_to = waypoints[i + 1]
         lat1, lon1 = float(wp_from["lat"]), float(wp_from["lon"])
         lat2, lon2 = float(wp_to["lat"]), float(wp_to["lon"])
+
+        # Trích xuất thời điểm giao hàng / ETA của đoạn này
+        seg_hour = default_hour
+        eta_str = wp_from.get("eta") or wp_from.get("time") or wp_from.get("etd")
+        if eta_str and isinstance(eta_str, str) and ":" in eta_str:
+            try:
+                seg_hour = int(eta_str.split(":")[0].strip())
+            except Exception:
+                pass
+
+        # Lấy dữ liệu 77 tuyến đường Kaggle tại đúng khung giờ xe lăn bánh
+        traffic_data = get_traffic_data_for_hour(seg_hour)
+        avg_congestion = compute_average_congestion(traffic_data)
 
         # Gọi OSRM để lấy geometry thực tế
         osrm_coords = f"{lon1},{lat1};{lon2},{lat2}"
@@ -1095,7 +1115,7 @@ async def api_route_geometry(request: Request):
         except Exception as e:
             print(f"[API] OSRM error for segment {i}: {e}")
 
-        # Tìm congestion gần nhất cho đoạn này
+        # Tìm congestion gần nhất cho đoạn này tại đúng thời điểm seg_hour
         mid_lat = (lat1 + lat2) / 2
         mid_lon = (lon1 + lon2) / 2
         seg_congestion = find_nearest_road_congestion(
@@ -1115,8 +1135,11 @@ async def api_route_geometry(request: Request):
                     all_route_lights.append({"lat": tl.lat, "lon": tl.lon})
                     break
 
-        # Xác định trạng thái ùn tắc
-        if seg_congestion < 0.6:
+        # Xác định trạng thái ùn tắc chuẩn:
+        # 🔴 Kẹt nặng: < 60%
+        # 🟡 Kẹt vừa: 60% - 75%
+        # 🟢 Thông thoáng: >= 75%
+        if seg_congestion < 0.60:
             status = "heavy"
             color = "#ef4444"
         elif seg_congestion < 0.75:
@@ -1132,6 +1155,8 @@ async def api_route_geometry(request: Request):
             "congestion_ratio": round(seg_congestion, 4),
             "status": status,
             "color": color,
+            "hour": seg_hour,
+            "eta": eta_str,
             "distance_km": osrm_distance,
             "duration_min": osrm_duration,
             "traffic_lights": seg_lights,
@@ -1201,13 +1226,23 @@ async def api_b2b_update_order(order_id: int, request: Request):
             update_args["lon"] = float(body["lon"])
         update_customer(customer_id, **update_args)
     update_order(order_id,
-        delivery_date_preferred=body.get("delivery_date_preferred"),
+        order_date=body.get("order_date") or body.get("delivery_date_preferred"),
+        delivery_date_preferred=body.get("delivery_date_preferred") or body.get("order_date"),
         source=body.get("source", existing.get("source") or "manual"),
         notes=body.get("notes", existing.get("notes") or ""),
     )
     if isinstance(body.get("items"), list):
         replace_order_items(order_id, body["items"])
     return {"success": True, "order": get_order_detail(order_id)}
+
+
+@app.delete("/api/b2b/orders/{order_id}")
+async def api_b2b_delete_order(order_id: int):
+    """Xóa một đơn hàng B2B."""
+    success = delete_order(order_id)
+    if not success:
+        return JSONResponse({"error": "Không tìm thấy đơn hàng"}, status_code=404)
+    return {"success": True, "message": f"Đã xóa đơn hàng #{order_id}"}
 
 
 @app.post("/api/b2b/orders")
@@ -1230,6 +1265,8 @@ async def api_b2b_save_order(request: Request):
         total_weight_kg=float(body.get("total_weight_kg", 250)),
         time_window_start=body.get("time_window_start", "08:00"),
         time_window_end=body.get("time_window_end", "17:00"),
+        order_date=body.get("order_date") or body.get("delivery_date_preferred"),
+        delivery_date_preferred=body.get("delivery_date_preferred") or body.get("order_date"),
         notes=body.get("notes", ""),
         source=body.get("source", "manual")
     )

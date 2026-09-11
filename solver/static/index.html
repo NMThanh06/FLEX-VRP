@@ -216,6 +216,59 @@
             box-shadow: 0 2px 10px var(--accent-glow);
         }
 
+        /* ── Trip Direction Switch Bar (Lượt đi / Lượt về) ── */
+        .trip-dir-switch-bar {
+            display: inline-flex;
+            background: var(--surface-2);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            gap: 4px;
+            align-items: center;
+        }
+
+        .trip-dir-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: inherit;
+        }
+
+        .trip-dir-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .trip-dir-btn.active.btn-outbound {
+            background: rgba(56, 189, 248, 0.22);
+            color: #38bdf8;
+            border-color: rgba(56, 189, 248, 0.55);
+            box-shadow: 0 1px 8px rgba(56, 189, 248, 0.25);
+        }
+
+        .trip-dir-btn.active.btn-return {
+            background: rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 1px 8px rgba(255, 255, 255, 0.35);
+        }
+
+        .trip-dir-btn.active.btn-all {
+            background: rgba(108, 99, 255, 0.25);
+            color: #c4b5fd;
+            border-color: rgba(108, 99, 255, 0.55);
+            box-shadow: 0 1px 8px rgba(108, 99, 255, 0.25);
+        }
+
         /* ── Search Wrapper & Detailed Autocomplete ── */
         .search-wrapper {
             position: relative;
@@ -268,6 +321,17 @@
 
         .autocomplete-dropdown.visible {
             display: block;
+        }
+
+        .route-arrow-marker {
+            pointer-events: auto;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+
+        .route-arrow-marker:hover {
+            transform: scale(1.3) !important;
+            z-index: 1000 !important;
         }
 
         .autocomplete-item {
@@ -2094,6 +2158,9 @@
                                 onclick="filterOrders('all', this)">Tất cả</button>
                             <button class="filter-btn" onclick="filterOrders('chatbot', this)">🤖 Chatbot</button>
                             <button class="filter-btn" onclick="filterOrders('excel', this)">📊 Excel</button>
+                            <button class="filter-btn" id="b2bSortDateBtn" onclick="toggleB2BDateSort()" title="Bấm để đảo chiều sắp xếp ngày đặt hàng">
+                                <span id="b2bSortDateIcon">⏳</span> <span id="b2bSortDateLabel">Ngày đặt: Cũ nhất trước</span>
+                            </button>
                         </div>
                     </div>
 
@@ -2107,7 +2174,9 @@
                                     <th>Mặt Hàng</th>
                                     <th>Số Lượng</th>
                                     <th>Trọng Lượng</th>
-                                    <th>Ngày Giao</th>
+                                    <th style="cursor:pointer;user-select:none;" onclick="toggleB2BDateSort()" title="Bấm để đảo chiều sắp xếp">
+                                        Ngày Đặt Hàng <span id="thSortIndicator" style="font-size:0.75rem;color:var(--accent);">▲</span>
+                                    </th>
                                     <th>Nguồn Nhận Đơn</th>
                                     <th></th>
                                 </tr>
@@ -2305,7 +2374,7 @@
     <div class="b2b-modal-overlay" id="tripDetailModal">
         <div class="b2b-modal-content">
             <button class="b2b-modal-close" onclick="closeTripModal()">✕</button>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
                 <div style="display:flex;align-items:center;gap:10px;">
                     <span style="font-size:1.2rem;">🗺️</span>
                     <div>
@@ -2313,8 +2382,18 @@
                         <div id="modalTripSubtitle" style="font-size:0.75rem;color:var(--text-dim);"></div>
                     </div>
                 </div>
-                <!-- chưa hoàn thiện -->
-                <!-- <button class="btn-b2b" onclick="toggleRawStops()" id="btnToggleRawStops" style="font-size:0.75rem;padding:6px 12px;background:var(--accent);border-radius:6px;">📋 Xem chi tiết đơn gốc (Excel)</button> -->
+                <!-- Nút chuyển đổi hướng hiển thị: Lượt đi / Lượt về / Cả hai -->
+                <div class="trip-dir-switch-bar">
+                    <button id="btnTripDirOutbound" class="trip-dir-btn btn-outbound active" onclick="setTripDirectionMode('outbound')">
+                        <span>➡️</span> Lượt đi
+                    </button>
+                    <button id="btnTripDirReturn" class="trip-dir-btn btn-return" onclick="setTripDirectionMode('return')">
+                        <span>↩️</span> Lượt về
+                    </button>
+                    <button id="btnTripDirAll" class="trip-dir-btn btn-all" onclick="setTripDirectionMode('all')" title="Xem cả 2 lượt cùng lúc">
+                        <span>🔄</span> Cả hai
+                    </button>
+                </div>
             </div>
             <div id="tripDetailMap"
                 style="width:100%;height:380px;border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
@@ -2381,6 +2460,10 @@
                             value="17:00">
                     </div>
                 </div>
+                <div>
+                    <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Ngày Đặt Hàng</label>
+                    <input type="date" id="moDate" class="search-box" style="width:100%;padding:8px 12px;">
+                </div>
                 <button class="btn-b2b btn-b2b-primary" style="margin-top:10px;justify-content:center;"
                     onclick="saveManualNewOrder()">
                     <span>💾</span> Lưu Đơn Hàng
@@ -2415,7 +2498,7 @@
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
-                <div><label>Ngày giao dự kiến</label><input id="eoDate" type="date" class="search-box"
+                <div><label>Ngày đặt hàng</label><input id="eoDate" type="date" class="search-box"
                         style="width:100%;padding:8px;"></div>
                 <div><label>Nguồn nhận đơn</label><select id="eoSource" class="search-box"
                         style="width:100%;padding:8px;">
@@ -2432,8 +2515,12 @@
                     style="width:100%;min-height:110px;padding:8px;"></textarea></div>
             <div style="margin-top:10px;"><label>Ghi chú</label><input id="eoNotes" class="search-box"
                     style="width:100%;padding:8px;"></div>
-            <button class="btn-b2b btn-b2b-primary" style="margin-top:14px;justify-content:center;"
-                onclick="saveEditedOrder()">💾 Lưu trực tiếp vào DB</button>
+            <div style="display:flex;gap:10px;margin-top:14px;">
+                <button class="btn-b2b btn-b2b-primary" style="flex:1;justify-content:center;"
+                    onclick="saveEditedOrder()">💾 Lưu trực tiếp vào DB</button>
+                <button class="btn-b2b" style="background:rgba(231,76,60,0.15);color:#e74c3c;border-color:rgba(231,76,60,0.3);justify-content:center;padding:8px 14px;"
+                    onclick="deleteCurrentOrder()">🗑️ Xóa đơn hàng</button>
+            </div>
         </div>
     </div>
 
@@ -2578,8 +2665,21 @@
 
                     <!-- 3 Alternative Routes Tabs -->
                     <div class="route-tabs-container" id="routeTabsContainer" style="display:none;">
-                        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;font-weight:600;">
-                            💡 Gợi ý các tuyến đường thay thế (Bấm để chọn hoặc Click trực tiếp vào đường trên bản đồ):
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+                            <div style="font-size:0.75rem;color:var(--text-dim);font-weight:600;">
+                                💡 Tuyến đường thay thế (Click để chọn):
+                            </div>
+                            <div class="trip-dir-switch-bar">
+                                <button id="btnOptDirOutbound" class="trip-dir-btn btn-outbound active" onclick="setOptimizerDirectionMode('outbound')">
+                                    <span>➡️</span> Lượt đi
+                                </button>
+                                <button id="btnOptDirReturn" class="trip-dir-btn btn-return" onclick="setOptimizerDirectionMode('return')">
+                                    <span>↩️</span> Lượt về
+                                </button>
+                                <button id="btnOptDirAll" class="trip-dir-btn btn-all" onclick="setOptimizerDirectionMode('all')" title="Xem cả 2 lượt cùng lúc">
+                                    <span>🔄</span> Cả hai
+                                </button>
+                            </div>
                         </div>
                         <div class="route-tabs" id="routeTabs"></div>
                     </div>
@@ -2770,6 +2870,8 @@
         let depotMarkers = [];
         let deliveryMarkers = [];
         let allAlternativePolylines = []; // Mảng chứa các layer polylines của cả 3 routes
+        let allAlternativeArrows = [];    // Mảng chứa các markers mũi tên của route đang chọn
+        let allAlternativePaths = [];     // Lưu tọa độ OSRM của từng route để re-draw mũi tên
         let trafficLightMarkers = [];
         let hoverPreviewMarker = null;
 
@@ -2794,9 +2896,187 @@
         let currentB2BFilter = 'all';
         let currentChatEngine = 'gemini';
         let b2bOptimizePollInterval = null;
-        let currentB2BResult = null;
         let tripDetailLeafletMap = null;
         let tripDetailRouteLayer = null;
+        let tripDetailOutboundArrows = [];
+        let tripDetailReturnArrows = [];
+        let tripDetailOutboundLines = [];
+        let tripDetailReturnLines = [];
+        let currentTripDirMode = 'outbound'; // 'outbound' (mặc định), 'return', 'all'
+
+        let optimizerDirMode = 'outbound';   // 'outbound' (mặc định), 'return', 'all'
+        let optimizerOutboundArrows = [];
+        let optimizerReturnArrows = [];
+
+        // ═══════════════════════════════════════
+        // DIRECTION ARROWS ON ROUTE (LƯỢT ĐI & LƯỢT VỀ)
+        // ═══════════════════════════════════════
+        function getPathDistanceKm(coords) {
+            if (!coords || coords.length < 2) return 0;
+            let d = 0;
+            for (let i = 0; i < coords.length - 1; i++) {
+                d += L.latLng(coords[i][0], coords[i][1]).distanceTo(L.latLng(coords[i + 1][0], coords[i + 1][1])) / 1000.0;
+            }
+            return d;
+        }
+
+        function getBearingDegrees(p1, p2) {
+            const lat1 = p1[0] * Math.PI / 180;
+            const lat2 = p2[0] * Math.PI / 180;
+            const dLon = (p2[1] - p1[1]) * Math.PI / 180;
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+            return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+
+        function getPointAndBearingAtRatio(coords, ratio) {
+            if (!coords || coords.length < 2) return null;
+            if (coords.length === 2) {
+                const lat = coords[0][0] + (coords[1][0] - coords[0][0]) * ratio;
+                const lon = coords[0][1] + (coords[1][1] - coords[0][1]) * ratio;
+                const bearing = getBearingDegrees(coords[0], coords[1]);
+                return { lat, lon, bearing };
+            }
+
+            const totalDist = getPathDistanceKm(coords);
+            if (totalDist <= 0.0001) {
+                return { lat: coords[0][0], lon: coords[0][1], bearing: 0 };
+            }
+
+            const targetDist = totalDist * Math.max(0.08, Math.min(0.92, ratio));
+            let accumulated = 0;
+
+            for (let i = 0; i < coords.length - 1; i++) {
+                const segDist = L.latLng(coords[i][0], coords[i][1]).distanceTo(L.latLng(coords[i + 1][0], coords[i + 1][1])) / 1000.0;
+                if (accumulated + segDist >= targetDist || i === coords.length - 2) {
+                    const subT = segDist > 1e-6 ? (targetDist - accumulated) / segDist : 0.5;
+                    const clampedT = Math.max(0, Math.min(1, subT));
+                    const lat = coords[i][0] + (coords[i + 1][0] - coords[i][0]) * clampedT;
+                    const lon = coords[i][1] + (coords[i + 1][1] - coords[i][1]) * clampedT;
+                    const nextIdx = Math.min(coords.length - 1, i + 1);
+                    const bearing = getBearingDegrees(coords[i], coords[nextIdx]);
+                    return { lat, lon, bearing };
+                }
+                accumulated += segDist;
+            }
+            return null;
+        }
+
+        function renderRouteDirectionArrows(targetLayerOrMap, coords, isReturn = false, customColor = null, containerList = null) {
+            if (!coords || coords.length < 2) return [];
+            const totalDist = getPathDistanceKm(coords);
+
+            // Mật độ mũi tên tùy theo độ dài đoạn đường
+            let ratios = [0.5];
+            if (totalDist >= 1.2 && totalDist < 3.5) {
+                ratios = [0.35, 0.70];
+            } else if (totalDist >= 3.5) {
+                ratios = [0.25, 0.50, 0.75];
+            }
+
+            // MÀU MŨI TÊN: Lượt đi màu xanh (#38bdf8), Lượt về màu TRẮNG (#ffffff)
+            const arrowColor = customColor || (isReturn ? '#ffffff' : '#38bdf8');
+            const strokeColor = '#0f172a'; // Viền đen slate tương phản mạnh mẽ
+            const label = isReturn ? '↩️ Hướng di chuyển: Lượt về kho xuất phát' : '➡️ Hướng di chuyển: Lượt đi giao hàng';
+            const createdMarkers = [];
+
+            ratios.forEach(r => {
+                const pt = getPointAndBearingAtRatio(coords, r);
+                if (!pt) return;
+
+                const arrowHtml = `
+                    <div style="transform: rotate(${pt.bearing.toFixed(1)}deg); width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.85));">
+                        <svg viewBox="0 0 24 24" width="20" height="20" style="overflow: visible;">
+                            <polygon points="12,2 21,21 12,16 3,21" fill="${arrowColor}" stroke="${strokeColor}" stroke-width="2" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                `;
+
+                const marker = L.marker([pt.lat, pt.lon], {
+                    icon: L.divIcon({
+                        className: 'route-arrow-marker',
+                        html: arrowHtml,
+                        iconSize: [22, 22],
+                        iconAnchor: [11, 11]
+                    }),
+                    interactive: true,
+                    zIndexOffset: isReturn ? 500 : 400
+                }).addTo(targetLayerOrMap);
+
+                marker.bindTooltip(`<strong>${label}</strong>`, { sticky: true, direction: 'top' });
+
+                createdMarkers.push(marker);
+                if (containerList) containerList.push(marker);
+            });
+
+            return createdMarkers;
+        }
+
+        // BẬT / TẮT HIỂN THỊ MŨI TÊN TRÊN MODAL CHI TIẾT CHUYẾN XE (Mặc định: 'outbound')
+        function setTripDirectionMode(mode) {
+            currentTripDirMode = mode;
+
+            const btnOut = document.getElementById('btnTripDirOutbound');
+            const btnRet = document.getElementById('btnTripDirReturn');
+            const btnAll = document.getElementById('btnTripDirAll');
+
+            if (btnOut) btnOut.classList.toggle('active', mode === 'outbound');
+            if (btnRet) btnRet.classList.toggle('active', mode === 'return');
+            if (btnAll) btnAll.classList.toggle('active', mode === 'all');
+
+            const showOut = (mode === 'outbound' || mode === 'all');
+            const showRet = (mode === 'return' || mode === 'all');
+
+            tripDetailOutboundArrows.forEach(m => {
+                if (m && m.getElement()) m.getElement().style.display = showOut ? '' : 'none';
+            });
+            tripDetailReturnArrows.forEach(m => {
+                if (m && m.getElement()) m.getElement().style.display = showRet ? '' : 'none';
+            });
+
+            // Tinh chỉnh độ đậm nhạt của tuyến đường tương ứng
+            tripDetailOutboundLines.forEach(l => {
+                l.setStyle({ opacity: showOut ? 0.9 : 0.25 });
+            });
+            tripDetailReturnLines.forEach(l => {
+                l.setStyle({ opacity: showRet ? 0.95 : 0.25 });
+            });
+        }
+
+        // BẬT / TẮT HIỂN THỊ MŨI TÊN TRÊN BẢN ĐỒ TỐI ƯU TAB 1 (Mặc định: 'outbound')
+        function setOptimizerDirectionMode(mode) {
+            optimizerDirMode = mode;
+
+            const btnOut = document.getElementById('btnOptDirOutbound');
+            const btnRet = document.getElementById('btnOptDirReturn');
+            const btnAll = document.getElementById('btnOptDirAll');
+
+            if (btnOut) btnOut.classList.toggle('active', mode === 'outbound');
+            if (btnRet) btnRet.classList.toggle('active', mode === 'return');
+            if (btnAll) btnAll.classList.toggle('active', mode === 'all');
+
+            const showOut = (mode === 'outbound' || mode === 'all');
+            const showRet = (mode === 'return' || mode === 'all');
+
+            optimizerOutboundArrows.forEach(m => {
+                if (m && m.getElement()) m.getElement().style.display = showOut ? '' : 'none';
+            });
+            optimizerReturnArrows.forEach(m => {
+                if (m && m.getElement()) m.getElement().style.display = showRet ? '' : 'none';
+            });
+
+            // Tùy chỉnh độ rõ của tuyến đường đang chọn theo lượt đi / lượt về
+            const activeLines = allAlternativePolylines[activeAlternativeIdx] || [];
+            const isRet = currentOptData && currentOptData.return_to_depot !== false;
+            activeLines.forEach((l, idx) => {
+                const isReturn = isRet && (idx === activeLines.length - 1);
+                if (isReturn) {
+                    l.setStyle({ opacity: showRet ? 0.90 : 0.15 });
+                } else {
+                    l.setStyle({ opacity: showOut ? 0.90 : 0.15 });
+                }
+            });
+        }
 
         // ═══════════════════════════════════════
         // TAB SWITCHER
@@ -2843,6 +3123,19 @@
             }
         }
 
+        let b2bDateSortOrder = 'asc'; // 'asc': cũ nhất trước (mặc định), 'desc': mới nhất trước
+
+        function toggleB2BDateSort() {
+            b2bDateSortOrder = (b2bDateSortOrder === 'asc') ? 'desc' : 'asc';
+            const label = document.getElementById('b2bSortDateLabel');
+            const icon = document.getElementById('b2bSortDateIcon');
+            const indicator = document.getElementById('thSortIndicator');
+            if (label) label.textContent = (b2bDateSortOrder === 'asc') ? 'Ngày đặt: Cũ nhất trước' : 'Ngày đặt: Mới nhất trước';
+            if (icon) icon.textContent = (b2bDateSortOrder === 'asc') ? '⏳' : '⌛';
+            if (indicator) indicator.textContent = (b2bDateSortOrder === 'asc') ? '▲' : '▼';
+            renderB2BOrdersTable();
+        }
+
         function filterOrders(status, btn) {
             currentB2BFilter = status;
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -2859,7 +3152,8 @@
             if (currentB2BFilter !== 'all') list = list.filter(o => (o.source || '').toLowerCase().includes(currentB2BFilter));
 
             function isMissingInfo(o) {
-                return !o.customer_name || !o.customer_address || !o.item_summary || !o.total_quantity || !o.delivery_date_preferred;
+                const od = o.order_date || o.delivery_date_preferred;
+                return !o.customer_name || !o.customer_address || !o.item_summary || !o.total_quantity || !od;
             }
 
             list.sort((a, b) => {
@@ -2870,10 +3164,14 @@
                     return bMissing - aMissing; // Missing info orders go to top (1 > 0)
                 }
 
-                const dateA = a.delivery_date_preferred || '9999-12-31';
-                const dateB = b.delivery_date_preferred || '9999-12-31';
-                if (dateA < dateB) return -1;
-                if (dateA > dateB) return 1;
+                const dateA = a.order_date || a.delivery_date_preferred || '9999-12-31';
+                const dateB = b.order_date || b.delivery_date_preferred || '9999-12-31';
+                
+                let cmp = dateA.localeCompare(dateB);
+                if (b2bDateSortOrder === 'desc') {
+                    cmp = -cmp;
+                }
+                if (cmp !== 0) return cmp;
 
                 return (b.id || 0) - (a.id || 0);
             });
@@ -2892,6 +3190,7 @@
                 const missing = isMissingInfo(o);
                 const trStyle = missing ? 'background-color:rgba(231, 76, 60, 0.08);' : '';
                 const missingIcon = missing ? '<span title="Đơn hàng đang thiếu thông tin cần bổ sung" style="color:#e74c3c;margin-right:5px;cursor:help;">⚠️</span>' : '';
+                const orderDateDisplay = o.order_date || o.delivery_date_preferred || 'Chưa chọn';
 
                 return `
             <tr style="${trStyle}">
@@ -2901,7 +3200,7 @@
                 <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${o.item_summary || ''}">${o.item_summary || '<span style="color:#e74c3c">Chưa có mặt hàng</span>'}</td>
                 <td><strong>${o.total_quantity || 0}</strong> <span style="font-size:0.7rem;color:var(--text-dim);">thùng</span></td>
                 <td>${(o.total_weight_kg || 0).toFixed(1)} kg</td>
-                <td><span style="font-size:0.75rem;color:${!o.delivery_date_preferred ? '#e74c3c' : 'var(--text-dim)'};">${o.delivery_date_preferred || 'Chưa chọn'}</span></td>
+                <td><span style="font-size:0.75rem;color:${!orderDateDisplay || orderDateDisplay === 'Chưa chọn' ? '#e74c3c' : 'var(--text-dim)'};">${orderDateDisplay}</span></td>
                 <td><span style="font-size:0.75rem;">${source}</span></td>
                 <td><button class="btn-b2b" style="padding:4px 7px;font-size:.72rem;" onclick="openEditOrder(${o.id})">✏️ Sửa</button></td>
             </tr>
@@ -2949,7 +3248,7 @@
                 document.getElementById('eoName').value = o.customer_name || '';
                 document.getElementById('eoPhone').value = o.customer_phone || '';
                 document.getElementById('eoAddress').value = o.customer_address || '';
-                document.getElementById('eoDate').value = o.delivery_date_preferred || '';
+                document.getElementById('eoDate').value = (o.order_date || o.delivery_date_preferred || '').split(' ')[0];
                 document.getElementById('eoSource').value = o.source || 'manual';
                 document.getElementById('eoNotes').value = o.notes || '';
                 document.getElementById('eoLat').value = o.customer_lat || '';
@@ -3054,13 +3353,15 @@
                 }
             }
 
+            const chosenDate = document.getElementById('eoDate').value || null;
             const payload = {
                 customer_name: document.getElementById('eoName').value.trim(),
                 customer_phone: document.getElementById('eoPhone').value.trim(),
                 customer_address: document.getElementById('eoAddress').value.trim(),
                 lat: document.getElementById('eoLat').value ? parseFloat(document.getElementById('eoLat').value) : null,
                 lon: document.getElementById('eoLon').value ? parseFloat(document.getElementById('eoLon').value) : null,
-                delivery_date_preferred: document.getElementById('eoDate').value || null,
+                order_date: chosenDate,
+                delivery_date_preferred: chosenDate,
                 source: document.getElementById('eoSource').value,
                 notes: document.getElementById('eoNotes').value.trim(),
                 items: items
@@ -3085,8 +3386,34 @@
             }
         }
 
+        async function deleteCurrentOrder() {
+            const id = document.getElementById('eoId').value;
+            const code = document.getElementById('eoCode').innerText || `#${id}`;
+            if (!id) return;
+            if (!confirm(`Bạn có chắc chắn muốn xóa đơn hàng ${code} không? Thao tác này không thể hoàn tác.`)) {
+                return;
+            }
+            try {
+                const resp = await fetch(`/api/b2b/orders/${id}`, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.success) {
+                    closeEditOrderModal();
+                    await loadB2BOrders();
+                    addBotChatMessage(`🗑️ **Đã xóa đơn hàng \`${code}\`** khỏi hệ thống.`);
+                } else {
+                    alert('Lỗi xóa đơn: ' + (data.error || 'Unknown'));
+                }
+            } catch (e) {
+                alert('Lỗi kết nối khi xóa đơn: ' + e);
+            }
+        }
+
         // ── Manual New Order Modal ──
         function openNewOrderModal() {
+            const moDate = document.getElementById('moDate');
+            if (moDate && !moDate.value) {
+                moDate.value = new Date().toISOString().slice(0, 10);
+            }
             document.getElementById('newOrderModal').classList.add('visible');
         }
         function closeNewOrderModal() {
@@ -3099,6 +3426,7 @@
             const wt = parseFloat(document.getElementById('moWeight').value) || 250;
             const tStart = document.getElementById('moTimeStart').value || '08:00';
             const tEnd = document.getElementById('moTimeEnd').value || '17:00';
+            const orderDateVal = document.getElementById('moDate')?.value || new Date().toISOString().slice(0, 10);
 
             if (!name || !addr) {
                 alert('Vui lòng nhập tên khách hàng và địa chỉ.');
@@ -3115,7 +3443,9 @@
                         total_quantity: qty,
                         total_weight_kg: wt,
                         time_window_start: tStart,
-                        time_window_end: tEnd
+                        time_window_end: tEnd,
+                        order_date: orderDateVal,
+                        delivery_date_preferred: orderDateVal
                     })
                 });
                 const data = await resp.json();
@@ -3464,7 +3794,7 @@
 
             document.getElementById('modalTripTitle').textContent = `${route.vehicle_name} — ${day.day_name} (${day.date})`;
             const displayStops = route.merged_stops || route.stops;
-            document.getElementById('modalTripSubtitle').textContent = `Mã Vận Đơn: ${route.waybill_code || 'N/A'} • Tải trọng: ${route.total_load_kg}/${route.capacity_kg} kg • Quãng đường: ${route.distance_km} km • ${displayStops.length} điểm dừng`;
+            document.getElementById('modalTripSubtitle').innerHTML = `Mã Vận Đơn: <strong>${route.waybill_code || 'N/A'}</strong> • Tải trọng: <strong>${route.total_load_kg}/${route.capacity_kg} kg</strong> • Quãng đường: <strong>${route.distance_km} km</strong> • ${displayStops.length} điểm dừng`;
 
             const tbody = document.getElementById('modalTripStopsBody');
 
@@ -3522,8 +3852,25 @@
                     tripDetailRouteLayer = L.layerGroup().addTo(tripDetailLeafletMap);
                 }
 
-                // ── Gọi API lấy đường thực tế (OSRM) + đèn giao thông + congestion ──
-                const waypoints = displayStops.map(st => ({ lat: st.lat, lon: st.lon }));
+                tripDetailOutboundArrows = [];
+                tripDetailReturnArrows = [];
+                tripDetailOutboundLines = [];
+                tripDetailReturnLines = [];
+
+                // ── Gọi API lấy đường thực tế (OSRM) + đèn giao thông + congestion theo thời điểm dự kiến ──
+                const waypoints = displayStops.map(st => ({
+                    lat: st.lat,
+                    lon: st.lon,
+                    name: st.name,
+                    eta: st.eta || null
+                }));
+
+                let tripHour = null;
+                if (route.departure_time && typeof route.departure_time === 'string' && route.departure_time.includes(':')) {
+                    tripHour = parseInt(route.departure_time.split(':')[0], 10);
+                } else if (displayStops[0] && displayStops[0].eta && displayStops[0].eta.includes(':')) {
+                    tripHour = parseInt(displayStops[0].eta.split(':')[0], 10);
+                }
 
                 // Thêm marker cho mỗi stop trước
                 displayStops.forEach((st, idx) => {
@@ -3547,37 +3894,49 @@
                     marker.bindPopup(popupHtml);
                 });
 
-                // Gọi API route-geometry để lấy đường thực tế
+                // Gọi API route-geometry để lấy đường thực tế và mức độ kẹt xe 77 tuyến theo đúng khung giờ ETA
                 try {
                     const geoResp = await fetch('/api/route-geometry', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ waypoints: waypoints })
+                        body: JSON.stringify({ waypoints: waypoints, target_hour: tripHour })
                     });
                     const geoData = await geoResp.json();
 
                     if (geoData.success && geoData.segments) {
                         const allBounds = [];
 
-                        // Vẽ từng segment với màu congestion
+                        // Vẽ từng segment: TUYẾN ĐƯỜNG PHẢI THỂ HIỆN MÀU SẮC KẸT XE THỰC TẾ (🔴/🟡/🟢) CHO CẢ LƯỢT ĐI VÀ LƯỢT VỀ
                         geoData.segments.forEach((seg, segIdx) => {
                             const isReturn = segIdx === geoData.segments.length - 1;
                             const polyline = L.polyline(seg.geometry, {
-                                color: seg.color,
+                                color: seg.color, // Màu kẹt xe thực tế (Đỏ / Vàng cam / Xanh lá) theo Kaggle 77 tuyến tại thời điểm dự kiến
                                 weight: 6,
-                                opacity: 0.88,
+                                opacity: 0.90,
                                 lineCap: 'round',
                                 lineJoin: 'round',
-                                dashArray: isReturn ? '10,8' : null
+                                dashArray: isReturn ? '10,8' : null // Nét đứt phân biệt lượt về
                             }).addTo(tripDetailRouteLayer);
 
-                            // Tooltip congestion trên mỗi đoạn
+                            if (isReturn) {
+                                tripDetailReturnLines.push(polyline);
+                            } else {
+                                tripDetailOutboundLines.push(polyline);
+                            }
+
+                            // Tooltip congestion trên mỗi đoạn hiển thị rõ ETA dự kiến
                             const congPct = Math.round(seg.congestion_ratio * 100);
                             const statusText = seg.status === 'heavy' ? '🔴 Kẹt nặng' : seg.status === 'medium' ? '🟡 Kẹt vừa' : '🟢 Thông thoáng';
+                            const segEtaText = seg.eta ? ` • Dự kiến: ${seg.eta}` : (seg.hour !== undefined ? ` • Khung giờ: ${seg.hour}h` : '');
+                            const returnPrefix = isReturn ? '↩️ [VỀ KHO] ' : '➡️ ';
                             polyline.bindTooltip(
-                                `${statusText} (${congPct}%)${seg.distance_km ? ` • ${seg.distance_km} km` : ''}${seg.traffic_light_count ? ` • 🚦${seg.traffic_light_count} đèn` : ''}`,
+                                `${returnPrefix}${statusText} (${congPct}%)${segEtaText}${seg.distance_km ? ` • ${seg.distance_km} km` : ''}${seg.traffic_light_count ? ` • 🚦${seg.traffic_light_count} đèn` : ''}`,
                                 { sticky: true }
                             );
+
+                            // Mũi tên chỉ hướng: Lượt đi màu xanh (#38bdf8), Lượt về MÀU TRẮNG (#ffffff)
+                            const arrowContainer = isReturn ? tripDetailReturnArrows : tripDetailOutboundArrows;
+                            renderRouteDirectionArrows(tripDetailRouteLayer, seg.geometry, isReturn, isReturn ? '#ffffff' : '#38bdf8', arrowContainer);
 
                             seg.geometry.forEach(pt => allBounds.push(pt));
                         });
@@ -3596,6 +3955,9 @@
                             });
                         }
 
+                        // Áp dụng chế độ mặc định là Lượt đi (hiển thị lượt đi, ẩn lượt về)
+                        setTripDirectionMode('outbound');
+
                         // Fit bounds
                         if (allBounds.length > 0) {
                             tripDetailLeafletMap.fitBounds(allBounds, { padding: [40, 40] });
@@ -3604,8 +3966,22 @@
                         // Fallback: vẽ đường thẳng nếu API fail
                         const latlngs = route.stops.map(st => [st.lat, st.lon]);
                         if (latlngs.length > 1) {
-                            const poly = L.polyline(latlngs, { color: '#6c63ff', weight: 5, opacity: 0.85, dashArray: '8, 6' }).addTo(tripDetailRouteLayer);
-                            tripDetailLeafletMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+                            for (let i = 0; i < latlngs.length - 1; i++) {
+                                const isRet = (i === latlngs.length - 2);
+                                const poly = L.polyline([latlngs[i], latlngs[i + 1]], {
+                                    color: '#6c63ff',
+                                    weight: 5,
+                                    opacity: 0.85,
+                                    dashArray: isRet ? '10,8' : '8, 6'
+                                }).addTo(tripDetailRouteLayer);
+                                if (isRet) tripDetailReturnLines.push(poly);
+                                else tripDetailOutboundLines.push(poly);
+
+                                const arrowContainer = isRet ? tripDetailReturnArrows : tripDetailOutboundArrows;
+                                renderRouteDirectionArrows(tripDetailRouteLayer, [latlngs[i], latlngs[i + 1]], isRet, isRet ? '#ffffff' : '#38bdf8', arrowContainer);
+                            }
+                            setTripDirectionMode('outbound');
+                            tripDetailLeafletMap.fitBounds(latlngs, { padding: [40, 40] });
                         }
                     }
                 } catch (geoErr) {
@@ -3613,8 +3989,22 @@
                     // Fallback: đường thẳng
                     const latlngs = route.stops.map(st => [st.lat, st.lon]);
                     if (latlngs.length > 1) {
-                        const poly = L.polyline(latlngs, { color: '#6c63ff', weight: 5, opacity: 0.85, dashArray: '8, 6' }).addTo(tripDetailRouteLayer);
-                        tripDetailLeafletMap.fitBounds(poly.getBounds(), { padding: [40, 40] });
+                        for (let i = 0; i < latlngs.length - 1; i++) {
+                            const isRet = (i === latlngs.length - 2);
+                            const poly = L.polyline([latlngs[i], latlngs[i + 1]], {
+                                color: '#6c63ff',
+                                weight: 5,
+                                opacity: 0.85,
+                                dashArray: isRet ? '10,8' : '8, 6'
+                            }).addTo(tripDetailRouteLayer);
+                            if (isRet) tripDetailReturnLines.push(poly);
+                            else tripDetailOutboundLines.push(poly);
+
+                            const arrowContainer = isRet ? tripDetailReturnArrows : tripDetailOutboundArrows;
+                            renderRouteDirectionArrows(tripDetailRouteLayer, [latlngs[i], latlngs[i + 1]], isRet, isRet ? '#ffffff' : '#38bdf8', arrowContainer);
+                        }
+                        setTripDirectionMode('outbound');
+                        tripDetailLeafletMap.fitBounds(latlngs, { padding: [40, 40] });
                     }
                 }
             }, 250);
@@ -4218,6 +4608,13 @@
         function clearAllRouteLayers() {
             allAlternativePolylines.forEach(lines => lines.forEach(l => map.removeLayer(l)));
             allAlternativePolylines = [];
+            allAlternativeArrows.forEach(m => map.removeLayer(m));
+            allAlternativeArrows = [];
+            optimizerOutboundArrows.forEach(m => map.removeLayer(m));
+            optimizerOutboundArrows = [];
+            optimizerReturnArrows.forEach(m => map.removeLayer(m));
+            optimizerReturnArrows = [];
+            allAlternativePaths = [];
             trafficLightMarkers.forEach(m => map.removeLayer(m));
             trafficLightMarkers = [];
         }
@@ -4299,6 +4696,8 @@
 
             const isRet = data.return_to_depot !== false;
             allAlternativePolylines = [];
+            allAlternativeArrows = [];
+            allAlternativePaths = [];
 
             // Cache OSRM paths
             for (let altIdx = 0; altIdx < alternatives.length; altIdx++) {
@@ -4306,6 +4705,7 @@
                 const route = alt.route;
                 const coords = route.map(r => [r.lat, r.lon]);
                 const linesForAlt = [];
+                const pathsForAlt = [];
                 const isCurrentActive = (altIdx === activeAlternativeIdx);
                 const style = ROUTE_STYLES[altIdx] || { activeColor: '#6c63ff', inactiveColor: '#94a3b8' };
 
@@ -4313,10 +4713,26 @@
                     const isReturn = isRet && (i === coords.length - 2);
                     const path = await getOSRMRoute([coords[i], coords[i + 1]]);
 
+                    // Lấy mức độ kẹt xe thực tế của đoạn đường này từ dữ liệu Kaggle 77 tuyến
+                    const segCong = alt.route[i + 1]?.congestion_ratio;
+                    let segColor = '#22c55e'; // 🟢 Thông thoáng (> 75%)
+                    let statusLabel = '🟢 Thông thoáng';
+                    if (segCong !== undefined) {
+                        if (segCong < 0.60) {
+                            segColor = '#ef4444'; // 🔴 Kẹt nặng (< 60%)
+                            statusLabel = '🔴 Kẹt nặng';
+                        } else if (segCong < 0.75) {
+                            segColor = '#f59e0b'; // 🟡 Kẹt vừa (60% - 75%)
+                            statusLabel = '🟡 Kẹt vừa';
+                        }
+                    }
+
+                    pathsForAlt.push({ path, isReturn, segColor });
+
                     const line = L.polyline(path, {
-                        color: isCurrentActive ? (isReturn ? '#6c63ff' : style.activeColor) : style.inactiveColor,
+                        color: isCurrentActive ? segColor : style.inactiveColor,
                         weight: isCurrentActive ? 6 : 4,
-                        opacity: isCurrentActive ? 0.9 : 0.4,
+                        opacity: isCurrentActive ? 0.90 : 0.35,
                         dashArray: isCurrentActive ? (isReturn ? '10,8' : null) : '6,6',
                         lineCap: 'round',
                         lineJoin: 'round'
@@ -4327,15 +4743,27 @@
                         switchAlternativeRoute(altIdx);
                     });
 
-                    // Hover tooltip trên đường
-                    line.bindTooltip(`📍 <strong>${alt.tag}</strong> (${alt.total_time_min.toFixed(0)} phút - ${alt.total_distance_km.toFixed(1)} km)<br><span style="font-size:0.7rem;color:var(--accent);">👉 Click để chọn tuyến này</span>`, {
+                    // Hover tooltip trên đường hiển thị đúng mức độ kẹt xe thực tế
+                    const congPct = segCong !== undefined ? Math.round(segCong * 100) : 100;
+                    const returnLabel = isReturn ? '↩️ [VỀ KHO] ' : '➡️ ';
+                    line.bindTooltip(`📍 <strong>${alt.tag}</strong> (${alt.total_time_min.toFixed(0)} phút - ${alt.total_distance_km.toFixed(1)} km)<br>${returnLabel}<strong>${statusLabel}</strong> (${congPct}%)<br><span style="font-size:0.7rem;color:var(--accent);">👉 Click để chọn tuyến này</span>`, {
                         sticky: true
                     });
 
                     linesForAlt.push(line);
+
+                    // Nếu là route đang kích hoạt, vẽ mũi tên chỉ hướng: Lượt đi màu xanh, Lượt về màu TRẮNG (#ffffff)
+                    if (isCurrentActive) {
+                        const targetArrows = isReturn ? optimizerReturnArrows : optimizerOutboundArrows;
+                        renderRouteDirectionArrows(map, path, isReturn, isReturn ? '#ffffff' : '#38bdf8', targetArrows);
+                    }
                 }
                 allAlternativePolylines.push(linesForAlt);
+                allAlternativePaths.push(pathsForAlt);
             }
+
+            // Áp dụng chế độ hiển thị mũi tên Lượt đi / Lượt về (mặc định: 'outbound')
+            setOptimizerDirectionMode(optimizerDirMode || 'outbound');
 
             // Traffic Lights Markers
             if (document.getElementById('showTrafficLights').checked && data.traffic_lights_on_route) {
@@ -4370,18 +4798,20 @@
 
             const isRet = currentOptData.return_to_depot !== false;
 
-            // Cập nhật lại style của từng polyline trên bản đồ
+            // Cập nhật lại style của từng polyline trên bản đồ: luôn giữ màu kẹt xe thực tế (segColor)
             allAlternativePolylines.forEach((lines, altIdx) => {
                 const isCurrentActive = (altIdx === activeAlternativeIdx);
                 const style = ROUTE_STYLES[altIdx] || { activeColor: '#6c63ff', inactiveColor: '#94a3b8' };
+                const altPaths = allAlternativePaths[altIdx] || [];
 
                 lines.forEach((line, lineIdx) => {
                     const isReturn = isRet && (lineIdx === lines.length - 1);
+                    const segColor = altPaths[lineIdx]?.segColor || '#22c55e';
                     if (isCurrentActive) {
                         line.setStyle({
-                            color: isReturn ? '#6c63ff' : style.activeColor,
+                            color: segColor,
                             weight: 6,
-                            opacity: 0.92,
+                            opacity: 0.90,
                             dashArray: isReturn ? '10,8' : null
                         });
                         line.bringToFront();
@@ -4395,6 +4825,19 @@
                     }
                 });
             });
+
+            // Vẽ lại mũi tên chỉ hướng cho route vừa được chọn
+            optimizerOutboundArrows.forEach(m => map.removeLayer(m));
+            optimizerOutboundArrows = [];
+            optimizerReturnArrows.forEach(m => map.removeLayer(m));
+            optimizerReturnArrows = [];
+            if (allAlternativePaths[newIdx]) {
+                allAlternativePaths[newIdx].forEach(seg => {
+                    const targetArrows = seg.isReturn ? optimizerReturnArrows : optimizerOutboundArrows;
+                    renderRouteDirectionArrows(map, seg.path, seg.isReturn, seg.isReturn ? '#ffffff' : '#38bdf8', targetArrows);
+                });
+                setOptimizerDirectionMode(optimizerDirMode || 'outbound');
+            }
 
             // Cập nhật stats & steps cho route mới
             const selectedAlt = currentAlternatives[newIdx];

@@ -130,6 +130,7 @@ def init_db():
                 time_window_start TEXT,
                 time_window_end TEXT,
                 delivery_date_preferred TEXT,
+                order_date TEXT,
                 notes TEXT,
                 source TEXT DEFAULT 'manual',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -238,6 +239,13 @@ def init_db():
             );
         """)
         conn.commit()
+
+        # Migration: thêm order_date nếu DB cũ chưa có
+        try:
+            conn.execute("ALTER TABLE orders ADD COLUMN order_date TEXT")
+            conn.commit()
+        except Exception:
+            pass
 
         # Seed events nếu table trống
         count = conn.execute("SELECT COUNT(*) FROM traffic_events").fetchone()[0]
@@ -707,21 +715,29 @@ def save_order(customer_id: int = None, order_code: str = None,
                status: str = "pending", total_quantity: int = 0,
                total_weight_kg: float = 0, total_volume_cbm: float = 0,
                time_window_start: str = None, time_window_end: str = None,
-               delivery_date_preferred: str = None, notes: str = "",
-               source: str = "manual") -> dict:
+               delivery_date_preferred: str = None, order_date: str = None,
+               notes: str = "", source: str = "manual") -> dict:
     """Tạo đơn hàng mới. Tự sinh mã 6 ký tự nếu không cung cấp."""
     if not order_code:
         order_code = _generate_order_code()
+    if not order_date and delivery_date_preferred:
+        order_date = delivery_date_preferred
+    if not delivery_date_preferred and order_date:
+        delivery_date_preferred = order_date
+    if not order_date:
+        order_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+        delivery_date_preferred = order_date
+
     conn = _get_conn()
     try:
         cur = conn.execute(
             """INSERT INTO orders (order_code, customer_id, status, total_quantity,
                total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
-               delivery_date_preferred, notes, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               delivery_date_preferred, order_date, notes, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (order_code, customer_id, status, total_quantity,
              total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
-             delivery_date_preferred, notes, source)
+             delivery_date_preferred, order_date, notes, source)
         )
         conn.commit()
         row = conn.execute("SELECT * FROM orders WHERE id=?", (cur.lastrowid,)).fetchone()
@@ -733,21 +749,24 @@ def save_order(customer_id: int = None, order_code: str = None,
 def get_orders(status: str = None) -> list[dict]:
     conn = _get_conn()
     try:
+        date_expr = "COALESCE(o.order_date, o.delivery_date_preferred, substr(o.created_at, 1, 16))"
         if status:
             rows = conn.execute(
-                "SELECT o.*, c.name as customer_name, c.address as customer_address, "
+                f"SELECT o.*, {date_expr} AS order_date, {date_expr} AS delivery_date_preferred, "
+                "c.name as customer_name, c.address as customer_address, "
                 "c.lat as customer_lat, c.lon as customer_lon, "
                 "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') FROM order_items WHERE order_id=o.id), '') AS item_summary "
                 "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-                "WHERE o.status=? ORDER BY o.created_at DESC", (status,)
+                f"WHERE o.status=? ORDER BY {date_expr} ASC", (status,)
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT o.*, c.name as customer_name, c.address as customer_address, "
+                f"SELECT o.*, {date_expr} AS order_date, {date_expr} AS delivery_date_preferred, "
+                "c.name as customer_name, c.address as customer_address, "
                 "c.lat as customer_lat, c.lon as customer_lon, "
                 "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') FROM order_items WHERE order_id=o.id), '') AS item_summary "
                 "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-                "ORDER BY o.created_at DESC"
+                f"ORDER BY {date_expr} ASC"
             ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -836,8 +855,12 @@ def update_order(order_id: int, **kwargs) -> dict | None:
     try:
         allowed = {'status', 'customer_id', 'total_quantity', 'total_weight_kg',
                     'total_volume_cbm', 'time_window_start', 'time_window_end',
-                    'delivery_date_preferred', 'notes', 'source'}
+                    'delivery_date_preferred', 'order_date', 'notes', 'source'}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if 'order_date' in updates and 'delivery_date_preferred' not in updates:
+            updates['delivery_date_preferred'] = updates['order_date']
+        elif 'delivery_date_preferred' in updates and 'order_date' not in updates:
+            updates['order_date'] = updates['delivery_date_preferred']
         if not updates:
             return None
         updates['updated_at'] = datetime.now().isoformat()
@@ -847,6 +870,19 @@ def update_order(order_id: int, **kwargs) -> dict | None:
         conn.commit()
         row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def delete_order(order_id: int) -> bool:
+    """Xóa một đơn hàng (xóa kèm order_items và delivery_schedule)."""
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
+        conn.execute("DELETE FROM delivery_schedule WHERE order_id=?", (order_id,))
+        cur = conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 

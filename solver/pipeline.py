@@ -46,27 +46,16 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
     
     # 1. Nạp dữ liệu đơn hàng trước để lấy ngày
     orders_raw = get_orders()
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    # Lấy các ngày giao hàng từ đơn hàng (lớn hơn hoặc bằng hôm nay)
-    order_dates = set()
-    for o in orders_raw:
-        d = o.get("delivery_date_preferred")
-        if d and d >= today_str:
-            order_dates.add(d)
-    
-    sorted_dates = sorted(list(order_dates))
-    date_list = sorted_dates[:planning_days]
-    
-    if not date_list:
-        date_list = [today_str]
-        
-    planning_days = len(date_list)
-    
+    today = datetime.now().date()
+    today_str = today.strftime("%Y-%m-%d")
+
+    # Kế hoạch giao hàng bắt đầu từ hôm nay cho planning_days ngày
+    date_list = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(planning_days)]
+
+    # Sắp xếp đơn theo ngày đặt hàng: đặt sớm nhất xếp trước (FIFO / Aging)
+    orders_raw.sort(key=lambda o: str(o.get("order_date") or o.get("delivery_date_preferred") or today_str))
+
     distant_orders_count = 0
-    if len(sorted_dates) > planning_days:
-        # Số đơn hàng thuộc các ngày xa hơn (không được lên lịch đợt này)
-        distant_orders_count = sum(1 for o in orders_raw if o.get("delivery_date_preferred") and o.get("delivery_date_preferred") > date_list[-1])
         
     customers_raw = get_customers()
     vehicles_raw = get_vehicles()
