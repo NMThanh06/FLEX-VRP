@@ -1,1 +1,0 @@
-                    const stopsSummary = (rt.merged_stops || rt.stops).map(st => st.name).join(' ➔ ');

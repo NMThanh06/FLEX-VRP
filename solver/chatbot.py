@@ -160,12 +160,17 @@ def _parse_fallback_local(text: str) -> dict | None:
 
 
 def call_openrouter(prompt: str, system_prompt: str = "", api_key: str = None, model: str = None) -> str:
-    """Gọi OpenRouter API (Claude, Llama, v.v.)."""
+    """Gọi OpenRouter API với cơ chế tự động thử danh sách model free khả dụng."""
     key = api_key or OPENROUTER_API_KEY
     if not key:
         raise ValueError("Chưa có OPENROUTER_API_KEY")
 
-    model_name = model or "meta-llama/llama-3.1-8b-instruct:free"
+    models_to_try = [model] if model else [
+        "nex-agi/nex-n2.5-mini:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "meta-llama/llama-3.1-8b-instruct:free"
+    ]
     url = "https://openrouter.ai/api/v1/chat/completions"
 
     messages = []
@@ -173,27 +178,35 @@ def call_openrouter(prompt: str, system_prompt: str = "", api_key: str = None, m
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    payload = {
-        "model": model_name,
-        "messages": messages,
-        "temperature": 0.2
-    }
+    last_err = None
+    for model_name in models_to_try:
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": 0.2
+        }
 
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {key}",
-            "HTTP-Referer": "http://localhost:5000",
-            "X-Title": "FLEX-VRP Logistics Hub"
-        },
-        method="POST"
-    )
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+                "HTTP-Referer": "http://localhost:5000",
+                "X-Title": "FLEX-VRP Logistics Hub"
+            },
+            method="POST"
+        )
 
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        data = json.loads(resp.read().decode('utf-8'))
-        return data['choices'][0]['message']['content']
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                return data['choices'][0]['message']['content']
+        except Exception as e:
+            last_err = e
+            continue
+
+    raise last_err or RuntimeError("Không thể gọi OpenRouter API với các model khả dụng.")
 
 
 def call_llm(prompt: str, system_prompt: str = "", preferred_provider: str = "gemini",
@@ -278,6 +291,29 @@ Nếu người dùng chỉ chào hỏi hoặc hỏi chung, trả về JSON:
 """
 
 
+def _format_delivery_info(order: dict) -> str:
+    """Format thông tin giao hàng dựa trên trạng thái đơn và lịch giao thực tế."""
+    status = order.get('status', 'pending')
+    scheduled = order.get('scheduled_delivery', '').strip() if order.get('scheduled_delivery') else ''
+    order_date = order.get('order_date', 'N/A')
+
+    lines = (
+        f"• Ngày đặt hàng: {order_date}\n"
+    )
+
+    if status in ('scheduled', 'in_transit', 'delivered') and scheduled:
+        lines += f"• 📅 Lịch giao: {scheduled}\n"
+        lines += f"• ✅ Đã lên lịch giao\n"
+    elif status == 'optimizing':
+        lines += f"• ⏳ Đang tối ưu lịch giao...\n"
+    elif status == 'confirmed':
+        lines += f"• 📋 Đã xác nhận, chờ lên lịch\n"
+    else:
+        lines += f"• 🕐 Chưa lên lịch giao\n"
+
+    return lines
+
+
 def process_user_chat(message: str, session_id: str = "default",
                       preferred_provider: str = "gemini",
                       gemini_key: str = None, openrouter_key: str = None) -> dict:
@@ -291,13 +327,14 @@ def process_user_chat(message: str, session_id: str = "default",
         if len(w) == 6 and w.isalnum():
             order_found = get_order_by_code(w)
             if order_found:
+                delivery_info = _format_delivery_info(order_found)
                 resp_text = (
                     f"📦 **Thông tin đơn hàng `{order_found['order_code']}`**:\n"
                     f"• **Khách hàng:** {order_found.get('customer_name') or 'N/A'}\n"
                     f"• **Địa chỉ:** {order_found.get('customer_address') or 'N/A'}\n"
                     f"• **Số lượng:** {order_found.get('total_quantity', 0)} kiện/thùng\n"
-                    f"• **Khung giờ:** {order_found.get('time_window_start', '08:00')} - {order_found.get('time_window_end', '17:00')}\n"
-                    f"• **Trạng thái:** {order_found.get('status', 'pending')}"
+                    f"• **Trạng thái:** {order_found.get('status', 'pending')}\n"
+                    f"{delivery_info}"
                 )
                 return {
                     "success": True,
@@ -488,12 +525,13 @@ def process_user_chat(message: str, session_id: str = "default",
         
         reply = f"🔍 **Đã tìm thấy {len(found)} đơn hàng khớp với '{query}':**\n"
         for o in found[:5]: # Chỉ hiện 5 đơn gần nhất
+            delivery_info = _format_delivery_info(o)
             reply += (
                 f"\n📦 **Mã đơn: `{o['order_code']}`**\n"
                 f"• Khách hàng: {o.get('customer_name', 'N/A')}\n"
                 f"• Số lượng: {o.get('total_quantity', 0)} thùng\n"
                 f"• Trạng thái: {o.get('status', 'pending')}\n"
-                f"• Ngày giao: {o.get('delivery_date_preferred', 'N/A')}\n"
+                f"{delivery_info}"
             )
         
         return {

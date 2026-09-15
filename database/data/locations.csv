@@ -1,0 +1,101 @@
+name,latitude,longitude,address,type
+Cửa hàng 1,10.727922,106.701611,"859 Nguyễn Thị Minh Khai, Quận 4, TP.HCM",convenience
+Cửa hàng 2,10.837843,106.664223,"742 Điện Biên Phủ, Quận 3, TP.HCM",grocery
+Cửa hàng 3,10.836521,106.783689,"438 Nguyễn Thị Minh Khai, Quận Phú Nhuận, TP.HCM",convenience
+Cửa hàng 4,10.828588,106.783908,"963 Trần Hưng Đạo, Quận 4, TP.HCM",supermarket
+Cửa hàng 5,10.776228,106.76104,"829 Nguyễn Đình Chiểu, Quận 3, TP.HCM",grocery
+Cửa hàng 6,10.755194,106.735607,"293 Điện Biên Phủ, Quận 1, TP.HCM",convenience
+Cửa hàng 7,10.760917,106.664701,"420 Lê Lợi, Quận 10, TP.HCM",convenience
+Cửa hàng 8,10.749636,106.61493,"2 Nguyễn Thị Minh Khai, Quận 1, TP.HCM",grocery
+Cửa hàng 9,10.751952,106.748472,"68 Lê Lợi, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 10,10.762497,106.660924,"236 Nguyễn Thị Minh Khai, Quận 10, TP.HCM",supermarket
+Cửa hàng 11,10.725427,106.736438,"683 Lê Lợi, Quận 3, TP.HCM",convenience
+Cửa hàng 12,10.849667,106.671043,"189 Nguyễn Thị Minh Khai, Quận Phú Nhuận, TP.HCM",convenience
+Cửa hàng 13,10.779835,106.736378,"865 Trần Hưng Đạo, Quận 5, TP.HCM",supermarket
+Cửa hàng 14,10.848578,106.761761,"384 Nguyễn Huệ, Quận 4, TP.HCM",supermarket
+Cửa hàng 15,10.758292,106.651194,"457 Cách Mạng Tháng Tám, Quận 3, TP.HCM",supermarket
+Cửa hàng 16,10.849568,106.764775,"920 Lê Lợi, Quận Phú Nhuận, TP.HCM",supermarket
+Cửa hàng 17,10.708468,106.658232,"979 Nguyễn Đình Chiểu, Quận 5, TP.HCM",supermarket
+Cửa hàng 18,10.790894,106.73094,"183 Cách Mạng Tháng Tám, Quận Bình Thạnh, TP.HCM",grocery
+Cửa hàng 19,10.755527,106.641524,"774 Nguyễn Thị Minh Khai, Quận Tân Bình, TP.HCM",supermarket
+Cửa hàng 20,10.816957,106.676657,"787 Lê Lợi, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 21,10.807518,106.705234,"704 Trần Hưng Đạo, Quận 1, TP.HCM",grocery
+Cửa hàng 22,10.841592,106.679461,"632 Cách Mạng Tháng Tám, Quận 5, TP.HCM",supermarket
+Cửa hàng 23,10.768218,106.775492,"56 Nam Kỳ Khởi Nghĩa, Quận 3, TP.HCM",grocery
+Cửa hàng 24,10.817494,106.713962,"406 Nam Kỳ Khởi Nghĩa, Quận 10, TP.HCM",grocery
+Cửa hàng 25,10.79101,106.63294,"596 Võ Văn Tần, Quận Tân Bình, TP.HCM",supermarket
+Cửa hàng 26,10.837783,106.709239,"277 Võ Văn Tần, Quận Tân Bình, TP.HCM",grocery
+Cửa hàng 27,10.798238,106.670956,"322 Nguyễn Đình Chiểu, Quận 3, TP.HCM",convenience
+Cửa hàng 28,10.703726,106.607589,"626 Điện Biên Phủ, Quận 5, TP.HCM",supermarket
+Cửa hàng 29,10.818021,106.783908,"824 Nguyễn Thị Minh Khai, Quận 4, TP.HCM",convenience
+Cửa hàng 30,10.761279,106.763262,"52 Trần Hưng Đạo, Quận 5, TP.HCM",supermarket
+Cửa hàng 31,10.789621,106.605969,"603 Nguyễn Đình Chiểu, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 32,10.757317,106.71889,"76 Võ Văn Tần, Quận Phú Nhuận, TP.HCM",supermarket
+Cửa hàng 33,10.846161,106.752187,"514 Nguyễn Thị Minh Khai, Quận Phú Nhuận, TP.HCM",convenience
+Cửa hàng 34,10.775084,106.792671,"147 Cách Mạng Tháng Tám, Quận 5, TP.HCM",grocery
+Cửa hàng 35,10.814572,106.616077,"81 Pasteur, Quận 1, TP.HCM",convenience
+Cửa hàng 36,10.718921,106.75971,"909 Nguyễn Thị Minh Khai, Quận 5, TP.HCM",grocery
+Cửa hàng 37,10.720116,106.77799,"947 Nguyễn Đình Chiểu, Quận 5, TP.HCM",grocery
+Cửa hàng 38,10.764749,106.741044,"534 Nguyễn Đình Chiểu, Quận 10, TP.HCM",convenience
+Cửa hàng 39,10.726273,106.646617,"545 Cách Mạng Tháng Tám, Quận 5, TP.HCM",grocery
+Cửa hàng 40,10.803768,106.702202,"397 Cách Mạng Tháng Tám, Quận 1, TP.HCM",grocery
+Cửa hàng 41,10.828197,106.743786,"716 Lê Lợi, Quận 3, TP.HCM",supermarket
+Cửa hàng 42,10.797634,106.67117,"284 Nguyễn Đình Chiểu, Quận 5, TP.HCM",grocery
+Cửa hàng 43,10.722757,106.615024,"16 Cách Mạng Tháng Tám, Quận Tân Bình, TP.HCM",supermarket
+Cửa hàng 44,10.774121,106.732764,"966 Võ Văn Tần, Quận 1, TP.HCM",grocery
+Cửa hàng 45,10.801945,106.680321,"63 Trần Hưng Đạo, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 46,10.848179,106.698286,"587 Lê Lợi, Quận 5, TP.HCM",grocery
+Cửa hàng 47,10.846303,106.752534,"952 Nguyễn Thị Minh Khai, Quận 1, TP.HCM",convenience
+Cửa hàng 48,10.847903,106.635915,"143 Pasteur, Quận 1, TP.HCM",convenience
+Cửa hàng 49,10.734768,106.638744,"930 Nam Kỳ Khởi Nghĩa, Quận 1, TP.HCM",grocery
+Cửa hàng 50,10.704041,106.767899,"945 Cách Mạng Tháng Tám, Quận 4, TP.HCM",supermarket
+Cửa hàng 51,10.734682,106.726963,"886 Nam Kỳ Khởi Nghĩa, Quận 1, TP.HCM",grocery
+Cửa hàng 52,10.820631,106.726,"4 Nguyễn Đình Chiểu, Quận Phú Nhuận, TP.HCM",supermarket
+Cửa hàng 53,10.784564,106.657589,"282 Lê Lợi, Quận 4, TP.HCM",supermarket
+Cửa hàng 54,10.783187,106.672798,"729 Nguyễn Đình Chiểu, Quận 1, TP.HCM",convenience
+Cửa hàng 55,10.711676,106.679699,"174 Nguyễn Thị Minh Khai, Quận 3, TP.HCM",supermarket
+Cửa hàng 56,10.822051,106.718297,"860 Võ Văn Tần, Quận Phú Nhuận, TP.HCM",grocery
+Cửa hàng 57,10.841274,106.707829,"938 Lê Lợi, Quận 4, TP.HCM",supermarket
+Cửa hàng 58,10.79354,106.689527,"514 Lê Lợi, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 59,10.748459,106.610653,"553 Cách Mạng Tháng Tám, Quận Bình Thạnh, TP.HCM",grocery
+Cửa hàng 60,10.812654,106.732825,"74 Pasteur, Quận Phú Nhuận, TP.HCM",grocery
+Cửa hàng 61,10.764251,106.681285,"731 Trần Hưng Đạo, Quận 10, TP.HCM",grocery
+Cửa hàng 62,10.8281,106.697715,"875 Pasteur, Quận 4, TP.HCM",supermarket
+Cửa hàng 63,10.806504,106.69215,"476 Nguyễn Huệ, Quận 3, TP.HCM",grocery
+Cửa hàng 64,10.814003,106.72574,"363 Hai Bà Trưng, Quận 10, TP.HCM",convenience
+Cửa hàng 65,10.710587,106.725362,"302 Nguyễn Thị Minh Khai, Quận 3, TP.HCM",grocery
+Cửa hàng 66,10.776307,106.734074,"365 Võ Văn Tần, Quận 5, TP.HCM",convenience
+Cửa hàng 67,10.811972,106.738361,"671 Lê Lợi, Quận Phú Nhuận, TP.HCM",convenience
+Cửa hàng 68,10.756323,106.606015,"21 Nguyễn Huệ, Quận 5, TP.HCM",supermarket
+Cửa hàng 69,10.767346,106.716474,"995 Hai Bà Trưng, Quận 1, TP.HCM",supermarket
+Cửa hàng 70,10.784628,106.672346,"487 Hai Bà Trưng, Quận 5, TP.HCM",supermarket
+Cửa hàng 71,10.765428,106.730749,"168 Nguyễn Huệ, Quận 5, TP.HCM",grocery
+Cửa hàng 72,10.742392,106.637634,"82 Lê Lợi, Quận Bình Thạnh, TP.HCM",grocery
+Cửa hàng 73,10.772101,106.717681,"156 Lê Lợi, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 74,10.749816,106.744666,"950 Lê Lợi, Quận 4, TP.HCM",supermarket
+Cửa hàng 75,10.705479,106.613595,"755 Pasteur, Quận 1, TP.HCM",convenience
+Cửa hàng 76,10.770044,106.746102,"98 Lê Lợi, Quận Phú Nhuận, TP.HCM",convenience
+Cửa hàng 77,10.798037,106.666943,"948 Nam Kỳ Khởi Nghĩa, Quận Tân Bình, TP.HCM",convenience
+Cửa hàng 78,10.802165,106.736238,"378 Trần Hưng Đạo, Quận Phú Nhuận, TP.HCM",convenience
+Cửa hàng 79,10.718278,106.69947,"499 Cách Mạng Tháng Tám, Quận Tân Bình, TP.HCM",grocery
+Cửa hàng 80,10.773215,106.698954,"108 Võ Văn Tần, Quận Tân Bình, TP.HCM",grocery
+Cửa hàng 81,10.762322,106.620131,"114 Lê Lợi, Quận 1, TP.HCM",convenience
+Cửa hàng 82,10.706019,106.793808,"524 Nguyễn Thị Minh Khai, Quận Tân Bình, TP.HCM",grocery
+Cửa hàng 83,10.830937,106.642567,"550 Nam Kỳ Khởi Nghĩa, Quận Bình Thạnh, TP.HCM",convenience
+Cửa hàng 84,10.838302,106.651986,"305 Nguyễn Đình Chiểu, Quận 1, TP.HCM",convenience
+Cửa hàng 85,10.752773,106.751827,"887 Nguyễn Huệ, Quận 10, TP.HCM",grocery
+Cửa hàng 86,10.733131,106.785644,"140 Pasteur, Quận 1, TP.HCM",convenience
+Cửa hàng 87,10.800627,106.795646,"388 Nguyễn Huệ, Quận Tân Bình, TP.HCM",supermarket
+Cửa hàng 88,10.709681,106.752782,"532 Cách Mạng Tháng Tám, Quận 3, TP.HCM",supermarket
+Cửa hàng 89,10.812188,106.794868,"113 Cách Mạng Tháng Tám, Quận 3, TP.HCM",convenience
+Cửa hàng 90,10.810258,106.746343,"860 Nguyễn Đình Chiểu, Quận 4, TP.HCM",supermarket
+Cửa hàng 91,10.751313,106.652926,"770 Nguyễn Huệ, Quận Bình Thạnh, TP.HCM",grocery
+Cửa hàng 92,10.784444,106.770103,"163 Pasteur, Quận 10, TP.HCM",convenience
+Cửa hàng 93,10.792464,106.694809,"698 Điện Biên Phủ, Quận 4, TP.HCM",convenience
+Cửa hàng 94,10.782943,106.708603,"546 Trần Hưng Đạo, Quận 1, TP.HCM",convenience
+Cửa hàng 95,10.736096,106.743989,"325 Nguyễn Đình Chiểu, Quận 4, TP.HCM",convenience
+Cửa hàng 96,10.833561,106.646964,"225 Nguyễn Thị Minh Khai, Quận 4, TP.HCM",grocery
+Cửa hàng 97,10.782439,106.693343,"855 Võ Văn Tần, Quận Tân Bình, TP.HCM",grocery
+Cửa hàng 98,10.784518,106.718229,"756 Nam Kỳ Khởi Nghĩa, Quận 3, TP.HCM",convenience
+Cửa hàng 99,10.839809,106.785332,"518 Nam Kỳ Khởi Nghĩa, Quận Tân Bình, TP.HCM",grocery
+Cửa hàng 100,10.842148,106.66303,"715 Cách Mạng Tháng Tám, Quận 1, TP.HCM",convenience

@@ -14,6 +14,11 @@
 
 ---
 
+## 🌟 Current Project Status (Cập nhật tiến độ)
+Dự án đã cơ bản hoàn thành **Phase 1 (Database & Models)** và một phần lớn **Phase 3 (Optimization Engine)** với cấu trúc Python Solver đã được khởi tạo. Chi tiết tiến trình đang được đánh dấu tích `[x]` tại [todo.md](./todo.md).
+
+---
+
 ## 📋 Giới thiệu
 
 **FLEX-VRP** là hệ thống Web App B2B giải quyết bài toán **Tối ưu Định tuyến Giao hàng Đa kỳ (Multi-Period VRP)** kết hợp **Tính toán Sơ đồ Bốc xếp 3D** cho chuỗi cung ứng vận tải:

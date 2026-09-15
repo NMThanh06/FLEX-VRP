@@ -24,6 +24,42 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _get_mysql_conn():
+    """Tạo kết nối tới MySQL flexvrp database (với auto-reconnect & credentials từ .env)."""
+    try:
+        import pymysql
+        import pymysql.cursors
+        env_file = Path(__file__).parent.parent / ".env"
+        db_host = "127.0.0.1"
+        db_port = 3306
+        db_user = "root"
+        db_pass = ""
+        db_name = "flexvrp"
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("DB_HOST="): db_host = line.split("=", 1)[1].strip().strip('"\'')
+                elif line.startswith("DB_PORT="):
+                    p = line.split("=", 1)[1].strip().strip('"\'')
+                    if p.isdigit(): db_port = int(p)
+                elif line.startswith("DB_USERNAME="): db_user = line.split("=", 1)[1].strip().strip('"\'')
+                elif line.startswith("DB_PASSWORD="): db_pass = line.split("=", 1)[1].strip().strip('"\'')
+                elif line.startswith("DB_DATABASE="): db_name = line.split("=", 1)[1].strip().strip('"\'')
+
+        return pymysql.connect(
+            host=db_host,
+            port=db_port,
+            user=db_user,
+            password=db_pass,
+            database=db_name,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+    except Exception:
+        return None
+
+
 def init_db():
     """Tạo tất cả tables nếu chưa có, seed dữ liệu cơ bản."""
     conn = _get_conn()
@@ -124,6 +160,7 @@ def init_db():
                 customer_id INTEGER,
                 status TEXT NOT NULL DEFAULT 'pending'
                     CHECK(status IN ('pending','incomplete','confirmed','optimizing','scheduled','in_transit','delivered','cancelled')),
+                is_urgent INTEGER DEFAULT 0,
                 total_quantity INTEGER DEFAULT 0,
                 total_weight_kg REAL DEFAULT 0,
                 total_volume_cbm REAL DEFAULT 0,
@@ -237,20 +274,75 @@ def init_db():
                 completed_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            -- ═══════════════════════════════════════
+            -- PHASE 2: Vehicle Cargo Specs & Dimensions
+            -- ═══════════════════════════════════════
+
+            -- Kích thước thùng xe (thông số xếp hàng 2D/3D)
+            CREATE TABLE IF NOT EXISTS vehicle_cargo_specs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vehicle_id INTEGER NOT NULL UNIQUE,
+                cargo_width_cm REAL NOT NULL,   -- Chiều rộng thùng (ngang xe)
+                cargo_depth_cm REAL NOT NULL,   -- Chiều dài thùng (trục xe từ cabin -> cửa sau)
+                cargo_height_cm REAL NOT NULL,  -- Chiều cao thùng
+                door_position TEXT DEFAULT 'rear',
+                max_layers INTEGER DEFAULT 2,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+            );
+
+            -- Danh mục kích thước kiện hàng chuẩn
+            CREATE TABLE IF NOT EXISTS cargo_dimensions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_identifier TEXT NOT NULL UNIQUE,
+                width_cm REAL NOT NULL DEFAULT 30,
+                depth_cm REAL NOT NULL DEFAULT 40,
+                height_cm REAL NOT NULL DEFAULT 30,
+                weight_kg REAL DEFAULT 10,
+                is_fragile INTEGER DEFAULT 0,
+                is_heavy INTEGER DEFAULT 0,
+                requires_cold INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         conn.commit()
 
-        # Migration: thêm order_date nếu DB cũ chưa có
+        # Migration: thêm order_date và is_urgent nếu DB cũ chưa có
         try:
             conn.execute("ALTER TABLE orders ADD COLUMN order_date TEXT")
             conn.commit()
         except Exception:
             pass
+            
+        try:
+            conn.execute("ALTER TABLE orders ADD COLUMN is_urgent INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception:
+            pass
+
+        # Migration Phase 2: thêm kích thước và thuộc tính cho order_items
+        for col, col_type in [
+            ("width_cm", "REAL DEFAULT 0"),
+            ("depth_cm", "REAL DEFAULT 0"),
+            ("height_cm", "REAL DEFAULT 0"),
+            ("requires_cold", "INTEGER DEFAULT 0"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE order_items ADD COLUMN {col} {col_type}")
+                conn.commit()
+            except Exception:
+                pass
 
         # Seed events nếu table trống
         count = conn.execute("SELECT COUNT(*) FROM traffic_events").fetchone()[0]
         if count == 0:
             _seed_events(conn)
+
+        # Seed vehicle cargo specs & cargo dimensions
+        _seed_vehicle_cargo_specs(conn)
+        _seed_cargo_dimensions(conn)
 
         print(f"[DB] Initialized at: {DB_PATH}")
     finally:
@@ -302,6 +394,76 @@ def _seed_events(conn: sqlite3.Connection):
     )
     conn.commit()
     print(f"[DB] Seeded {len(events)} traffic events")
+
+
+def _seed_vehicle_cargo_specs(conn: sqlite3.Connection):
+    """Seed thông số thùng xe cho các xe hiện có nếu chưa có spec."""
+    try:
+        vehicles = conn.execute("SELECT id, name, capacity_kg FROM vehicles").fetchall()
+        for v in vehicles:
+            vid = v["id"]
+            existing = conn.execute("SELECT id FROM vehicle_cargo_specs WHERE vehicle_id=?", (vid,)).fetchone()
+            if existing:
+                continue
+            cap = float(v["capacity_kg"] or 1000)
+            if cap <= 1200:
+                # 1 Tấn (VD: Suzuki Carry)
+                w, d, h = 160.0, 300.0, 160.0
+                note = "Preset 1T (300×160×160cm)"
+            elif cap <= 3000:
+                # 2.5 Tấn (VD: Hyundai Porter)
+                w, d, h = 190.0, 430.0, 185.0
+                note = "Preset 2.5T (430×190×185cm)"
+            else:
+                # 5 Tấn (VD: Isuzu NQR)
+                w, d, h = 220.0, 600.0, 210.0
+                note = "Preset 5T (600×220×210cm)"
+            
+            conn.execute(
+                """INSERT INTO vehicle_cargo_specs 
+                   (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes)
+                   VALUES (?, ?, ?, ?, 'rear', 2, ?)""",
+                (vid, w, d, h, note)
+            )
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] Warning seed vehicle_cargo_specs: {e}")
+
+
+def _seed_cargo_dimensions(conn: sqlite3.Connection):
+    """Seed bảng kích thước kiện hàng chuẩn (FMCG)."""
+    standard_items = [
+        ("Thùng mì gói Hảo Hảo", 38.0, 28.0, 22.0, 5.0, 0, 0, 0),
+        ("Thùng nước ngọt Coca", 40.0, 26.0, 14.0, 8.5, 0, 1, 0),
+        ("Thùng sữa Vinamilk", 36.0, 24.0, 15.0, 6.0, 1, 0, 0),
+        ("Thùng bia Tiger", 40.0, 27.0, 16.0, 9.0, 0, 1, 0),
+        ("Thùng dầu ăn Neptune", 34.0, 26.0, 28.0, 10.0, 0, 1, 0),
+        ("Thùng nước suối Lavie", 40.0, 26.0, 24.0, 6.0, 0, 0, 0),
+        ("Thùng bánh Oreo", 32.0, 22.0, 18.0, 3.0, 0, 0, 0),
+        ("Thùng bột giặt OMO", 42.0, 30.0, 25.0, 5.0, 0, 1, 0),
+        ("Thùng kem dưỡng da", 28.0, 20.0, 16.0, 0.5, 1, 0, 0),
+        ("Thùng sữa rửa mặt", 30.0, 22.0, 18.0, 0.8, 1, 0, 0),
+        ("Thùng snack Pringles", 45.0, 30.0, 25.0, 1.5, 0, 0, 0),
+        ("Thùng nước tăng lực Red Bull", 38.0, 25.0, 14.0, 4.0, 0, 0, 0),
+        ("Thùng đường Biên Hòa", 40.0, 30.0, 20.0, 10.0, 0, 1, 0),
+        ("Thùng bột mì", 40.0, 30.0, 22.0, 5.0, 0, 1, 0),
+        ("Thùng nước mắm Chinsu", 35.0, 25.0, 28.0, 6.0, 1, 0, 0),
+        ("Thùng giấy vệ sinh", 50.0, 40.0, 30.0, 2.0, 0, 0, 0),
+        ("Thùng xà bông Lifebuoy", 32.0, 24.0, 18.0, 1.5, 0, 0, 0),
+        ("Thùng kem Merino / xúc xích lạnh", 40.0, 30.0, 25.0, 8.0, 0, 0, 1),
+        ("Thùng sữa chua / kem tươi", 36.0, 26.0, 20.0, 6.5, 1, 0, 1),
+    ]
+    try:
+        for name, w, d, h, wt, frag, heavy, cold in standard_items:
+            conn.execute(
+                """INSERT OR IGNORE INTO cargo_dimensions
+                   (item_identifier, width_cm, depth_cm, height_cm, weight_kg, is_fragile, is_heavy, requires_cold)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (name, w, d, h, wt, frag, heavy, cold)
+            )
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] Warning seed cargo_dimensions: {e}")
 
 
 # ═══════════════════════════════════════
@@ -364,8 +526,25 @@ def save_vehicle(name: str, vtype: str, max_speed: float, avg_speed: float,
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, vtype, max_speed, avg_speed, capacity_kg, capacity_cbm, fuel_type, specs_source)
         )
+        vid = cur.lastrowid
+        cap = float(capacity_kg or 1000)
+        if cap <= 1200:
+            w, d, h = 160.0, 300.0, 160.0
+            note = "Preset 1T (300×160×160cm)"
+        elif cap <= 3000:
+            w, d, h = 190.0, 430.0, 185.0
+            note = "Preset 2.5T (430×190×185cm)"
+        else:
+            w, d, h = 220.0, 600.0, 210.0
+            note = "Preset 5T (600×220×210cm)"
+        conn.execute(
+            """INSERT OR IGNORE INTO vehicle_cargo_specs 
+               (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes)
+               VALUES (?, ?, ?, ?, 'rear', 2, ?)""",
+            (vid, w, d, h, note)
+        )
         conn.commit()
-        return cur.lastrowid
+        return vid
     finally:
         conn.close()
 
@@ -396,6 +575,414 @@ def delete_vehicle(vehicle_id: int) -> bool:
         return cur.rowcount > 0
     finally:
         conn.close()
+
+
+# ═══════════════════════════════════════
+# PHASE 2 & 3: VEHICLE CARGO SPECS (MySQL + SQLite)
+# ═══════════════════════════════════════
+
+def save_vehicle_cargo_specs(vehicle_id: int, cargo_width_cm: float, cargo_depth_cm: float,
+                             cargo_height_cm: float, door_position: str = 'rear',
+                             max_layers: int = 3, notes: str = '') -> int:
+    """Lưu hoặc cập nhật kích thước thùng xe (đồng bộ MySQL + SQLite)."""
+    # 1. Đồng bộ sang MySQL flexvrp
+    m_conn = _get_mysql_conn()
+    if m_conn:
+        try:
+            with m_conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO vehicle_cargo_specs 
+                    (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        cargo_width_cm=VALUES(cargo_width_cm),
+                        cargo_depth_cm=VALUES(cargo_depth_cm),
+                        cargo_height_cm=VALUES(cargo_height_cm),
+                        door_position=VALUES(door_position),
+                        max_layers=VALUES(max_layers),
+                        notes=VALUES(notes)
+                """, (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes))
+        except Exception:
+            pass
+        finally:
+            m_conn.close()
+
+    # 2. Lưu dự phòng SQLite
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            """INSERT INTO vehicle_cargo_specs 
+               (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(vehicle_id) DO UPDATE SET
+                   cargo_width_cm=excluded.cargo_width_cm,
+                   cargo_depth_cm=excluded.cargo_depth_cm,
+                   cargo_height_cm=excluded.cargo_height_cm,
+                   door_position=excluded.door_position,
+                   max_layers=excluded.max_layers,
+                   notes=excluded.notes""",
+            (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes)
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_vehicle_cargo_spec(vehicle_id: int) -> dict:
+    """Lấy kích thước thùng xe (ưu tiên MySQL, fallback SQLite)."""
+    m_conn = _get_mysql_conn()
+    if m_conn:
+        try:
+            with m_conn.cursor() as cur:
+                cur.execute("SELECT * FROM vehicle_cargo_specs WHERE vehicle_id=%s", (vehicle_id,))
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+        except Exception:
+            pass
+        finally:
+            m_conn.close()
+
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT * FROM vehicle_cargo_specs WHERE vehicle_id=?", (vehicle_id,)).fetchone()
+        if row:
+            return dict(row)
+        
+        # Fallback preset nếu chưa có bản ghi
+        v = conn.execute("SELECT capacity_kg FROM vehicles WHERE id=?", (vehicle_id,)).fetchone()
+        cap = float(v["capacity_kg"]) if v and v["capacity_kg"] else 1000.0
+        if cap <= 1200:
+            return {"vehicle_id": vehicle_id, "cargo_width_cm": 160.0, "cargo_depth_cm": 300.0, "cargo_height_cm": 160.0, "door_position": "rear", "max_layers": 3, "notes": "Preset 1T"}
+        elif cap <= 3000:
+            return {"vehicle_id": vehicle_id, "cargo_width_cm": 190.0, "cargo_depth_cm": 430.0, "cargo_height_cm": 185.0, "door_position": "rear", "max_layers": 3, "notes": "Preset 2.5T"}
+        else:
+            return {"vehicle_id": vehicle_id, "cargo_width_cm": 220.0, "cargo_depth_cm": 600.0, "cargo_height_cm": 210.0, "door_position": "rear", "max_layers": 3, "notes": "Preset 5T"}
+    finally:
+        conn.close()
+
+
+def get_all_vehicle_cargo_specs() -> list[dict]:
+    """Lấy danh sách kích thước thùng xe kèm thông tin xe (ưu tiên MySQL)."""
+    m_conn = _get_mysql_conn()
+    if m_conn:
+        try:
+            with m_conn.cursor() as cur:
+                cur.execute("""
+                    SELECT s.*, v.name as vehicle_name, v.type as vehicle_type, v.capacity_kg, v.capacity_cbm
+                    FROM vehicles v LEFT JOIN vehicle_cargo_specs s ON v.id = s.vehicle_id
+                    ORDER BY v.capacity_kg ASC
+                """)
+                rows = cur.fetchall()
+                if rows:
+                    result = []
+                    for r in rows:
+                        d = dict(r)
+                        if not d.get("cargo_width_cm"):
+                            cap = float(d.get("capacity_kg") or 1000)
+                            if cap <= 1200:
+                                d.update({"cargo_width_cm": 160.0, "cargo_depth_cm": 300.0, "cargo_height_cm": 160.0, "max_layers": 3})
+                            elif cap <= 3000:
+                                d.update({"cargo_width_cm": 190.0, "cargo_depth_cm": 430.0, "cargo_height_cm": 185.0, "max_layers": 3})
+                            else:
+                                d.update({"cargo_width_cm": 220.0, "cargo_depth_cm": 600.0, "cargo_height_cm": 210.0, "max_layers": 3})
+                        result.append(d)
+                    return result
+        except Exception:
+            pass
+        finally:
+            m_conn.close()
+
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            """SELECT s.*, v.name as vehicle_name, v.type as vehicle_type, v.capacity_kg, v.capacity_cbm
+               FROM vehicles v LEFT JOIN vehicle_cargo_specs s ON v.id = s.vehicle_id
+               ORDER BY v.capacity_kg ASC"""
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            if not d.get("cargo_width_cm"):
+                cap = float(d.get("capacity_kg") or 1000)
+                if cap <= 1200:
+                    d.update({"cargo_width_cm": 160.0, "cargo_depth_cm": 300.0, "cargo_height_cm": 160.0, "max_layers": 3})
+                elif cap <= 3000:
+                    d.update({"cargo_width_cm": 190.0, "cargo_depth_cm": 430.0, "cargo_height_cm": 185.0, "max_layers": 3})
+                else:
+                    d.update({"cargo_width_cm": 220.0, "cargo_depth_cm": 600.0, "cargo_height_cm": 210.0, "max_layers": 3})
+            result.append(d)
+        return result
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════
+# PHASE 2: CARGO DIMENSIONS CRUD & ESTIMATION
+# ═══════════════════════════════════════
+
+def save_cargo_dimensions(item_identifier: str, width_cm: float, depth_cm: float,
+                          height_cm: float, weight_kg: float = 10.0,
+                          is_fragile: int = 0, is_heavy: int = 0, requires_cold: int = 0) -> int:
+    # 1. MySQL
+    m_conn = _get_mysql_conn()
+    if m_conn:
+        try:
+            with m_conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO cargo_dimensions 
+                    (item_identifier, width_cm, depth_cm, height_cm, weight_kg, is_fragile, is_heavy, requires_cold)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        width_cm=VALUES(width_cm),
+                        depth_cm=VALUES(depth_cm),
+                        height_cm=VALUES(height_cm),
+                        weight_kg=VALUES(weight_kg),
+                        is_fragile=VALUES(is_fragile),
+                        is_heavy=VALUES(is_heavy),
+                        requires_cold=VALUES(requires_cold)
+                """, (item_identifier, width_cm, depth_cm, height_cm, weight_kg, is_fragile, is_heavy, requires_cold))
+        except Exception:
+            pass
+        finally:
+            m_conn.close()
+
+    # 2. SQLite
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            """INSERT INTO cargo_dimensions 
+               (item_identifier, width_cm, depth_cm, height_cm, weight_kg, is_fragile, is_heavy, requires_cold)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(item_identifier) DO UPDATE SET
+                   width_cm=excluded.width_cm,
+                   depth_cm=excluded.depth_cm,
+                   height_cm=excluded.height_cm,
+                   weight_kg=excluded.weight_kg,
+                   is_fragile=excluded.is_fragile,
+                   is_heavy=excluded.is_heavy,
+                   requires_cold=excluded.requires_cold""",
+            (item_identifier, width_cm, depth_cm, height_cm, weight_kg, is_fragile, is_heavy, requires_cold)
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_cargo_dimensions(item_identifier: str) -> dict | None:
+    m_conn = _get_mysql_conn()
+    if m_conn:
+        try:
+            with m_conn.cursor() as cur:
+                cur.execute("SELECT * FROM cargo_dimensions WHERE item_identifier=%s", (item_identifier,))
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+        except Exception:
+            pass
+        finally:
+            m_conn.close()
+
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT * FROM cargo_dimensions WHERE item_identifier=?", (item_identifier,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════
+# PHASE 3: 3D LOADING PLANS & AI DEBATE LOGS (MySQL)
+# ═══════════════════════════════════════
+
+def save_loading_plan(route_id: str, vehicle_id: int, truck_width: float,
+                      truck_depth: float, truck_height: float,
+                      placed_items: list, unplaced_items: list,
+                      total_weight: float, space_util: float,
+                      balance_ratio: float, warnings: list = None,
+                      debate_score: float = 100.0, debate_verified: int = 1) -> int:
+    """Lưu trữ kết quả tính toán xếp hàng 3D vào MySQL loading_plans."""
+    m_conn = _get_mysql_conn()
+    if not m_conn:
+        return 0
+    try:
+        with m_conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO route_loading_plans (
+                    route_id, vehicle_id, truck_width_cm, truck_depth_cm, truck_height_cm,
+                    total_items_placed, total_items_unplaced, total_weight_kg,
+                    space_utilization_pct, balance_ratio, placed_items_json,
+                    warnings_json, debate_score, debate_verified
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                str(route_id), int(vehicle_id or 1), float(truck_width), float(truck_depth), float(truck_height),
+                len(placed_items), len(unplaced_items), float(total_weight),
+                float(space_util), float(balance_ratio),
+                json.dumps(placed_items, ensure_ascii=False),
+                json.dumps(warnings or [], ensure_ascii=False),
+                float(debate_score), int(debate_verified)
+            ))
+            return cur.lastrowid
+    except Exception as e:
+        print(f"[DB] Error save_loading_plan: {e}")
+        return 0
+    finally:
+        m_conn.close()
+
+
+def get_loading_plan(route_id: str) -> dict | None:
+    """Truy xuất sơ đồ xếp hàng 3D từ MySQL route_loading_plans."""
+    m_conn = _get_mysql_conn()
+    if not m_conn:
+        return None
+    try:
+        with m_conn.cursor() as cur:
+            cur.execute("SELECT * FROM route_loading_plans WHERE route_id=%s ORDER BY id DESC LIMIT 1", (str(route_id),))
+            row = cur.fetchone()
+            if row:
+                d = dict(row)
+                if d.get("placed_items_json"):
+                    d["placed_items"] = json.loads(d["placed_items_json"])
+                if d.get("warnings_json"):
+                    d["warnings"] = json.loads(d["warnings_json"])
+                return d
+            return None
+    finally:
+        m_conn.close()
+
+
+def save_ai_debate_log(route_id: str, vehicle_id: int, round_count: int,
+                       proposer_arguments: list, opponent_critiques: list,
+                       violations_detected: list, resolutions_applied: list,
+                       consensus_score: float, learning_lesson: str = "") -> int:
+    """Lưu nhật ký tranh biện 2 AI vào MySQL ai_debate_logs phục vụ học máy."""
+    m_conn = _get_mysql_conn()
+    if not m_conn:
+        return 0
+    try:
+        with m_conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO ai_debate_logs (
+                    route_id, vehicle_id, round_count, proposer_arguments,
+                    opponent_critiques, violations_detected, resolutions_applied,
+                    consensus_score, learning_lesson
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                str(route_id), int(vehicle_id or 1), int(round_count),
+                json.dumps(proposer_arguments, ensure_ascii=False),
+                json.dumps(opponent_critiques, ensure_ascii=False),
+                json.dumps(violations_detected, ensure_ascii=False),
+                json.dumps(resolutions_applied, ensure_ascii=False),
+                float(consensus_score), str(learning_lesson)
+            ))
+            return cur.lastrowid
+    except Exception as e:
+        print(f"[DB] Error save_ai_debate_log: {e}")
+        return 0
+    finally:
+        m_conn.close()
+
+
+def get_ai_debate_logs(route_id: str = None, limit: int = 10) -> list[dict]:
+    """Lấy danh sách nhật ký tranh biện từ MySQL."""
+    m_conn = _get_mysql_conn()
+    if not m_conn:
+        return []
+    try:
+        with m_conn.cursor() as cur:
+            if route_id:
+                cur.execute("SELECT * FROM ai_debate_logs WHERE route_id=%s ORDER BY id DESC LIMIT %s", (str(route_id), limit))
+            else:
+                cur.execute("SELECT * FROM ai_debate_logs ORDER BY id DESC LIMIT %s", (limit,))
+            rows = cur.fetchall()
+            res = []
+            for r in rows:
+                d = dict(r)
+                for k in ["proposer_arguments", "opponent_critiques", "violations_detected", "resolutions_applied"]:
+                    if d.get(k):
+                        try: d[k] = json.loads(d[k])
+                        except Exception: pass
+                res.append(d)
+            return res
+    finally:
+        m_conn.close()
+
+
+def get_algorithm_learning_weights() -> dict:
+    """Lấy trọng số phạt mà AI đã học từ các lỗi trước."""
+    m_conn = _get_mysql_conn()
+    if not m_conn:
+        return {
+            "LIFO_BLOCK_ACCESS": 1.0,
+            "FRAGILE_CRUSH_HAZARD": 1.0,
+            "HEAVY_ON_TOP": 1.0,
+            "LATERAL_UNBALANCE": 1.0
+        }
+    try:
+        with m_conn.cursor() as cur:
+            cur.execute("SELECT constraint_name, penalty_multiplier FROM algorithm_learning_weights")
+            rows = cur.fetchall()
+            return {r["constraint_name"]: float(r["penalty_multiplier"]) for r in rows}
+    finally:
+        m_conn.close()
+
+
+def record_algorithm_violation(constraint_name: str, multiplier_delta: float = 0.1):
+    """Cập nhật trọng số phạt khi AI Opponent phát hiện lỗi để thuật toán tự sửa chữa."""
+    m_conn = _get_mysql_conn()
+    if not m_conn:
+        return
+    try:
+        with m_conn.cursor() as cur:
+            cur.execute("""
+                UPDATE algorithm_learning_weights
+                SET penalty_multiplier = penalty_multiplier + %s,
+                    violation_occurrences = violation_occurrences + 1
+                WHERE constraint_name = %s
+            """, (multiplier_delta, constraint_name))
+    finally:
+        m_conn.close()
+
+
+def get_or_estimate_cargo_dimensions(product_name: str, weight_kg: float = 1.0, volume_cbm: float = 0.01) -> dict:
+    """
+    Tìm kích thước kiện hàng trong DB.
+    Nếu chưa có, tự động ước lượng thông minh từ tên sản phẩm, trọng lượng và thể tích.
+    """
+    clean_name = product_name.strip()
+    existing = get_cargo_dimensions(clean_name)
+    if existing:
+        return existing
+    
+    # Heuristic ước lượng từ tên & thể tích
+    name_lower = clean_name.lower()
+    is_fragile = 1 if any(k in name_lower for k in ['vỡ', 'thủy tinh', 'mắm', 'mỹ phẩm', 'kem dưỡng', 'sữa']) else 0
+    is_heavy = 1 if (weight_kg >= 8.0 or any(k in name_lower for k in ['nặng', 'dầu ăn', 'đường', 'bia', 'bột giặt', 'gạo'])) else 0
+    requires_cold = 1 if any(k in name_lower for k in ['lạnh', 'đông', 'kem', 'sữa chua', 'tươi', 'thịt', 'cá']) else 0
+
+    if volume_cbm > 0:
+        vol_cm3 = volume_cbm * 1000000.0
+        # Cạnh tương đương (giả định tỷ lệ chiều dài:rộng:cao ~ 1.25 : 1.0 : 0.8)
+        cube_side = vol_cm3 ** (1.0 / 3.0)
+        w = round(max(15.0, min(120.0, cube_side * 1.0)), 1)
+        d = round(max(15.0, min(140.0, cube_side * 1.25)), 1)
+        h = round(max(10.0, min(120.0, vol_cm3 / (w * d))), 1)
+    else:
+        # Kích thước thùng carton chuẩn tiêu dùng
+        w, d, h = 35.0, 40.0, 25.0
+    
+    return {
+        "item_identifier": clean_name,
+        "width_cm": w,
+        "depth_cm": d,
+        "height_cm": h,
+        "weight_kg": weight_kg,
+        "is_fragile": is_fragile,
+        "is_heavy": is_heavy,
+        "requires_cold": requires_cold
+    }
 
 
 # ═══════════════════════════════════════
@@ -712,7 +1299,7 @@ def _generate_order_code() -> str:
 
 
 def save_order(customer_id: int = None, order_code: str = None,
-               status: str = "pending", total_quantity: int = 0,
+               status: str = "pending", is_urgent: int = 0, total_quantity: int = 0,
                total_weight_kg: float = 0, total_volume_cbm: float = 0,
                time_window_start: str = None, time_window_end: str = None,
                delivery_date_preferred: str = None, order_date: str = None,
@@ -731,11 +1318,11 @@ def save_order(customer_id: int = None, order_code: str = None,
     conn = _get_conn()
     try:
         cur = conn.execute(
-            """INSERT INTO orders (order_code, customer_id, status, total_quantity,
+            """INSERT INTO orders (order_code, customer_id, status, is_urgent, total_quantity,
                total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
                delivery_date_preferred, order_date, notes, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (order_code, customer_id, status, total_quantity,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (order_code, customer_id, status, is_urgent, total_quantity,
              total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
              delivery_date_preferred, order_date, notes, source)
         )
@@ -749,24 +1336,31 @@ def save_order(customer_id: int = None, order_code: str = None,
 def get_orders(status: str = None) -> list[dict]:
     conn = _get_conn()
     try:
-        date_expr = "COALESCE(o.order_date, o.delivery_date_preferred, substr(o.created_at, 1, 16))"
+        order_date_expr = "COALESCE(o.order_date, substr(o.created_at, 1, 16))"
+        sort_expr = "COALESCE(o.order_date, o.delivery_date_preferred, substr(o.created_at, 1, 16))"
+        schedule_sub = (
+            "(SELECT ds.delivery_date || ' ' || COALESCE(ds.eta, '') "
+            "FROM delivery_schedule ds WHERE ds.order_id = o.id "
+            "ORDER BY ds.delivery_date ASC LIMIT 1)"
+        )
+        base_select = (
+            f"SELECT o.*, "
+            f"{order_date_expr} AS order_date, "
+            f"o.delivery_date_preferred, "
+            f"{schedule_sub} AS scheduled_delivery, "
+            "c.name as customer_name, c.address as customer_address, "
+            "c.lat as customer_lat, c.lon as customer_lon, "
+            "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') "
+            "FROM order_items WHERE order_id=o.id), '') AS item_summary "
+            "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
+        )
         if status:
             rows = conn.execute(
-                f"SELECT o.*, {date_expr} AS order_date, {date_expr} AS delivery_date_preferred, "
-                "c.name as customer_name, c.address as customer_address, "
-                "c.lat as customer_lat, c.lon as customer_lon, "
-                "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') FROM order_items WHERE order_id=o.id), '') AS item_summary "
-                "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-                f"WHERE o.status=? ORDER BY {date_expr} ASC", (status,)
+                base_select + f"WHERE o.status=? ORDER BY {sort_expr} ASC", (status,)
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT o.*, {date_expr} AS order_date, {date_expr} AS delivery_date_preferred, "
-                "c.name as customer_name, c.address as customer_address, "
-                "c.lat as customer_lat, c.lon as customer_lon, "
-                "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') FROM order_items WHERE order_id=o.id), '') AS item_summary "
-                "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-                f"ORDER BY {date_expr} ASC"
+                base_select + f"ORDER BY {sort_expr} ASC"
             ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -818,13 +1412,36 @@ def replace_order_items(order_id: int, items: list[dict]) -> None:
             quantity = int(item.get('quantity') or 0)
             if not name or quantity <= 0:
                 continue
-            weight = float(item.get('weight_per_unit_kg') or 1.0)
-            volume = float(item.get('volume_per_unit_cbm') or 0.01)
+            weight = float(item.get('weight_per_unit_kg') or item.get('weight') or 1.0)
+            volume = float(item.get('volume_per_unit_cbm') or item.get('volume') or 0.01)
+            
+            # Kích thước & thuộc tính
+            w = float(item.get('width_cm') or 0)
+            d = float(item.get('depth_cm') or 0)
+            h = float(item.get('height_cm') or 0)
+            fragile = 1 if item.get('is_fragile') else 0
+            heavy = 1 if item.get('is_heavy') else 0
+            cold = 1 if item.get('requires_cold') else 0
+            
+            if w <= 0 or d <= 0 or h <= 0:
+                dims = get_or_estimate_cargo_dimensions(name, weight, volume)
+                w = dims['width_cm']
+                d = dims['depth_cm']
+                h = dims['height_cm']
+                if not fragile:
+                    fragile = dims['is_fragile']
+                if not heavy:
+                    heavy = dims['is_heavy']
+                if not cold:
+                    cold = dims['requires_cold']
+
             conn.execute(
                 """INSERT INTO order_items (order_id, product_name, quantity, weight_per_unit_kg,
-                   volume_per_unit_cbm, total_weight_kg, total_volume_cbm)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (order_id, name, quantity, weight, volume, quantity * weight, quantity * volume)
+                   volume_per_unit_cbm, total_weight_kg, total_volume_cbm,
+                   width_cm, depth_cm, height_cm, is_fragile, is_heavy, requires_cold)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (order_id, name, quantity, weight, volume, quantity * weight, quantity * volume,
+                 w, d, h, fragile, heavy, cold)
             )
         totals = conn.execute(
             """SELECT COALESCE(SUM(quantity), 0), COALESCE(SUM(total_weight_kg), 0),
@@ -853,7 +1470,7 @@ def update_order(order_id: int, **kwargs) -> dict | None:
     """Cập nhật đơn hàng. kwargs: bất kỳ cột nào trong orders."""
     conn = _get_conn()
     try:
-        allowed = {'status', 'customer_id', 'total_quantity', 'total_weight_kg',
+        allowed = {'status', 'customer_id', 'is_urgent', 'total_quantity', 'total_weight_kg',
                     'total_volume_cbm', 'time_window_start', 'time_window_end',
                     'delivery_date_preferred', 'order_date', 'notes', 'source'}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
@@ -914,18 +1531,39 @@ def update_order_totals(order_id: int):
 def save_order_item(order_id: int, product_name: str, quantity: int = 1,
                     weight_per_unit_kg: float = 1.0, volume_per_unit_cbm: float = 0.01,
                     is_fragile: bool = False, is_heavy: bool = False,
+                    requires_cold: bool = False,
+                    width_cm: float = 0, depth_cm: float = 0, height_cm: float = 0,
                     notes: str = "") -> int:
     conn = _get_conn()
     try:
         total_weight = quantity * weight_per_unit_kg
         total_volume = quantity * volume_per_unit_cbm
+        
+        w, d, h = width_cm, depth_cm, height_cm
+        frag = 1 if is_fragile else 0
+        heavy = 1 if is_heavy else 0
+        cold = 1 if requires_cold else 0
+        
+        if w <= 0 or d <= 0 or h <= 0:
+            dims = get_or_estimate_cargo_dimensions(product_name, weight_per_unit_kg, volume_per_unit_cbm)
+            w = dims["width_cm"]
+            d = dims["depth_cm"]
+            h = dims["height_cm"]
+            if not frag:
+                frag = dims["is_fragile"]
+            if not heavy:
+                heavy = dims["is_heavy"]
+            if not cold:
+                cold = dims["requires_cold"]
+
         cur = conn.execute(
             """INSERT INTO order_items (order_id, product_name, quantity,
                weight_per_unit_kg, volume_per_unit_cbm,
-               total_weight_kg, total_volume_cbm, is_fragile, is_heavy, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               total_weight_kg, total_volume_cbm,
+               width_cm, depth_cm, height_cm, is_fragile, is_heavy, requires_cold, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (order_id, product_name, quantity, weight_per_unit_kg, volume_per_unit_cbm,
-             total_weight, total_volume, int(is_fragile), int(is_heavy), notes)
+             total_weight, total_volume, w, d, h, frag, heavy, cold, notes)
         )
         conn.commit()
         # Cập nhật totals cho order

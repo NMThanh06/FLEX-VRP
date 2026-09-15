@@ -13,6 +13,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Three.js & OrbitControls for 3D Cargo Packing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
         *,
@@ -2069,7 +2072,682 @@
         .b2b-modal-close:hover {
             color: #fff;
         }
+
+        /* ── Phase 2: Bin Packing 2D Visualizer ── */
+        .modal-subtab-bar {
+            display: flex;
+            gap: 8px;
+            background: var(--surface-2);
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            margin-bottom: 14px;
+        }
+
+        .modal-subtab-btn {
+            flex: 1;
+            padding: 8px 14px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-dim);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .modal-subtab-btn:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .modal-subtab-btn.active {
+            color: #fff;
+            background: var(--accent);
+            box-shadow: 0 2px 10px var(--accent-glow);
+        }
+
+        .packing-controls-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+        }
+
+        .packing-layer-pills {
+            display: flex;
+            background: var(--surface-3);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 4px;
+        }
+
+        .packing-layer-pill {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .packing-layer-pill.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .packing-legend-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.74rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 500;
+        }
+
+        .legend-color-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+
+        .packing-balance-card {
+            background: var(--surface-3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 220px;
+        }
+
+        .packing-balance-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+
+        .packing-balance-track {
+            height: 8px;
+            background: #232733;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .packing-balance-left {
+            background: linear-gradient(90deg, #60a5fa, #3b82f6);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .packing-balance-right {
+            background: linear-gradient(90deg, #a855f7, #ec4899);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .packing-canvas-container {
+            position: relative;
+            background: #0e111a;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .packing-truck-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            margin-bottom: 6px;
+            padding: 0 4px;
+        }
+
+        .packing-truck-footer {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            margin-top: 6px;
+            padding: 0 4px;
+        }
+
+        #packingCanvas {
+            border: 2px solid #2e3345;
+            border-radius: 8px;
+            background: #141724;
+            max-width: 100%;
+            cursor: pointer;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+
+        .packing-tooltip {
+            position: absolute;
+            display: none;
+            background: rgba(22, 25, 37, 0.95);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.75rem;
+            color: #fff;
+            pointer-events: none;
+            z-index: 9999;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            line-height: 1.4;
+            min-width: 190px;
+        }
+
+        /* ── 3D & AI Debate Enhancements ── */
+        .packing-subtab-bar {
+            display: flex;
+            gap: 8px;
+            background: var(--surface-2);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .packing-subtab-pill {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .packing-subtab-pill:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .packing-subtab-pill.active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 2px 8px var(--accent-glow);
+        }
+        .packing-filter-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface-3);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 4px 10px;
+        }
+        .packing-customer-select {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 0.78rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .packing-customer-select option {
+            background: var(--surface-2);
+            color: var(--text);
+        }
+        .packing-3d-container {
+            position: relative;
+            width: 100%;
+            height: 650px;
+            background: radial-gradient(circle at center, #111625 0%, #080a10 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.8);
+        }
+        #packing3DCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            outline: none;
+            cursor: grab;
+        }
+        #packing3DCanvas:active {
+            cursor: grabbing;
+        }
+        .packing-camera-bar {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+            background: rgba(15, 17, 23, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .packing-camera-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .packing-camera-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--border);
+        }
+        .packing-3d-help-badge {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            z-index: 10;
+            background: rgba(15, 17, 23, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            pointer-events: none;
+        }
+        .customer-focus-card {
+            background: linear-gradient(135deg, rgba(108, 99, 255, 0.12), rgba(251, 191, 36, 0.08));
+            border: 1px solid rgba(251, 191, 36, 0.4);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+        .customer-focus-card.inactive {
+            display: none;
+        }
+        .customer-focus-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .customer-focus-badge {
+            background: #fbbf24;
+            color: #0f1117;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+        }
+        .debate-panel-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 14px;
+        }
+        .debate-stream {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 14px;
+            max-height: 460px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+        .debate-card {
+            border-radius: 10px;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            font-size: 0.8rem;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease;
+        }
+        .debate-card.proposer {
+            background: rgba(96, 165, 250, 0.08);
+            border-color: rgba(96, 165, 250, 0.3);
+        }
+        .debate-card.opponent {
+            background: rgba(248, 113, 113, 0.08);
+            border-color: rgba(248, 113, 113, 0.3);
+        }
+        .debate-card.repair {
+            background: rgba(251, 191, 36, 0.08);
+            border-color: rgba(251, 191, 36, 0.3);
+        }
+        .debate-card.consensus {
+            background: rgba(52, 211, 153, 0.1);
+            border-color: rgba(52, 211, 153, 0.4);
+        }
+        .debate-author {
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        /* ── Compact Packing Warnings Banner ── */
+        .packing-compact-warnings {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(239, 68, 68, 0.05));
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-radius: 10px;
+            margin-top: 10px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+        .warnings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+            background: rgba(0, 0, 0, 0.15);
+            transition: background 0.15s;
+        }
+        .warnings-header:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .warnings-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .warnings-icon {
+            font-size: 1rem;
+        }
+        .warnings-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #fbbf24;
+        }
+        .warnings-chips-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .warning-chip {
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .warning-chip-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .warning-chip-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .warning-chip-info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .warnings-expand-btn {
+            background: rgba(251, 191, 36, 0.15);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: #fbbf24;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s;
+        }
+        .warnings-expand-btn:hover {
+            background: rgba(251, 191, 36, 0.25);
+        }
+        .warnings-details-list {
+            max-height: 130px;
+            overflow-y: auto;
+            padding: 6px 14px 10px;
+            border-top: 1px dashed rgba(245, 158, 11, 0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .warning-detail-item {
+            font-size: 0.73rem;
+            color: #fcd34d;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            line-height: 1.4;
+            padding: 2px 0;
+        }
+
+        /* ── Compact Packing Items Section ── */
+        .packing-items-section {
+            margin-top: 12px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px 14px;
+        }
+        .packing-items-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .items-toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .items-toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .packing-view-toggle {
+            display: inline-flex;
+            background: var(--surface-3);
+            border-radius: 6px;
+            padding: 2px;
+            border: 1px solid var(--border);
+        }
+        .packing-mode-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .packing-mode-btn.active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+        .packing-search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--surface-3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 3px 8px;
+        }
+        .packing-search-input {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 0.73rem;
+            outline: none;
+            width: 150px;
+        }
+        .packing-quick-filters {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .quick-filter-pill {
+            background: var(--surface-3);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .quick-filter-pill:hover {
+            color: var(--text);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .quick-filter-pill.active {
+            background: rgba(108, 99, 255, 0.2);
+            border-color: var(--accent);
+            color: var(--accent-light);
+        }
+        .packing-stops-accordion {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 380px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .stop-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .stop-card:hover {
+            border-color: rgba(108, 99, 255, 0.4);
+        }
+        .stop-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+            background: rgba(255, 255, 255, 0.02);
+            transition: background 0.15s;
+        }
+        .stop-card-header:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .stop-card-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .stop-card-metrics {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .stop-expand-icon {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .stop-card-body {
+            border-top: 1px solid var(--border);
+            padding: 6px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .packing-table-scrollable {
+            max-height: 340px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+        .packing-table-scrollable thead th {
+            position: sticky;
+            top: 0;
+            background: var(--surface-3);
+            z-index: 5;
+            box-shadow: 0 1px 0 var(--border);
+        }
+        .compact-packing-table th,
+        .compact-packing-table td {
+            padding: 6px 8px;
+            font-size: 0.74rem;
+        }
+        .packing-item-row {
+            transition: background 0.15s;
+        }
+        .packing-item-row:hover {
+            background: rgba(108, 99, 255, 0.12) !important;
+        }
+        .packing-item-row.selected-row {
+            background: rgba(108, 99, 255, 0.25) !important;
+            box-shadow: inset 2px 0 0 var(--accent);
+        }
     </style>
+
 </head>
 
 <body>
@@ -2107,21 +2785,13 @@
                             II</span>
                     </div>
                     <div class="b2b-btn-group">
-                        <button class="btn-b2b btn-b2b-seed" onclick="seedB2BData()">
-                            <span>🌱</span> Nạp 10 Đơn Mẫu
-                        </button>
                         <button class="btn-b2b" onclick="openNewOrderModal()">
                             <span>➕</span> Thêm Đơn Hàng
                         </button>
-                        <div
-                            style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-dim);background:var(--surface-2);padding:6px 12px;border-radius:8px;border:1px solid var(--border);">
-                            <span>📅 Chu kỳ:</span>
-                            <select id="b2bPlanningDays"
-                                style="background:transparent;border:none;color:#fff;font-weight:600;outline:none;cursor:pointer;">
-                                <option value="5" selected>5 ngày (T2-T6)</option>
-                                <option value="3">3 ngày (T2-T4)</option>
-                                <option value="7">7 ngày (Cả tuần)</option>
-                            </select>
+                        <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-dim);background:var(--surface-2);padding:6px 12px;border-radius:8px;border:1px solid var(--border);">
+                            <span>Tối đa:</span>
+                            <input type="number" id="b2bOrderLimit" placeholder="Tất cả" style="width:60px;background:transparent;border:none;color:#fff;font-weight:600;outline:none;text-align:center;">
+                            <span>đơn</span>
                         </div>
                         <button class="btn-b2b btn-b2b-primary" id="btnRunB2BOptimize" onclick="runB2BOptimization()">
                             <span>🚀</span> Chạy Phân Bổ & Tối Ưu
@@ -2152,6 +2822,9 @@
                         <div style="display:flex;align-items:center;gap:10px;">
                             <span style="font-weight:700;font-size:0.92rem;">📋 Danh Sách Đơn Hàng B2B</span>
                             <span class="badge" id="b2bOrderTotalBadge">0 đơn</span>
+                            <input type="text" id="b2bSearchInput" placeholder="🔍 Tìm mã, tên khách, địa chỉ..." 
+                                style="margin-left:10px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface-2);color:#fff;font-size:0.8rem;width:200px;outline:none;"
+                                onkeyup="renderB2BOrdersTable()">
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
                             <button class="filter-btn active" id="filterAllOrders"
@@ -2207,7 +2880,7 @@
                     <!-- Summary bar ngắn gọn -->
                     <div id="b2bSummaryBar"
                         style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:0.82rem;">
-                        <span>📦 <strong id="sumOrders">0</strong> đơn lên lịch</span>
+                        <span>📦 <strong id="sumOrders">0</strong> tổng đơn (<span id="sumScheduled">0</span> lên lịch)</span>
                         <span>⏳ <strong id="sumDistantOrders">0</strong> đơn lịch xa (>6 ngày)</span>
                         <span>🚛 <strong id="sumVehicles">0</strong> xe</span>
                         <span>📏 <strong id="sumKm">0</strong> km</span>
@@ -2372,98 +3045,467 @@
 
     <!-- Modal Xem Chi Tiết Lộ Trình Chuyến Xe -->
     <div class="b2b-modal-overlay" id="tripDetailModal">
-        <div class="b2b-modal-content">
+        <div class="b2b-modal-content" style="max-width: 1400px; width: 95%;">
             <button class="b2b-modal-close" onclick="closeTripModal()">✕</button>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+
+            <!-- Header -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
                 <div style="display:flex;align-items:center;gap:10px;">
-                    <span style="font-size:1.2rem;">🗺️</span>
+                    <span style="font-size:1.3rem;">🚛</span>
                     <div>
-                        <h3 id="modalTripTitle" style="font-size:1.05rem;font-weight:700;">Chi Tiết Lộ Trình Xe</h3>
+                        <h3 id="modalTripTitle" style="font-size:1.1rem;font-weight:700;">Chi Tiết Chuyến Xe</h3>
                         <div id="modalTripSubtitle" style="font-size:0.75rem;color:var(--text-dim);"></div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Subtab Switcher: Bản Đồ vs Sơ Đồ Xếp Hàng -->
+            <div class="modal-subtab-bar">
+                <button class="modal-subtab-btn active" id="btnSubtabMap" onclick="switchTripDetailSubtab('map')">
+                    <span>🗺️</span> Bản Đồ Lộ Trình
+                </button>
+                <button class="modal-subtab-btn" id="btnSubtabPacking" onclick="switchTripDetailSubtab('packing')">
+                    <span>🧊</span> Mô Hình Xếp Hàng 3D & Hội Đồng AI Tranh Biện
+                    <span class="badge" style="background:rgba(108,99,255,0.25);color:var(--accent);font-size:0.68rem;padding:2px 6px;">3D WebGL • 2 AI Debate</span>
+                </button>
+            </div>
+
+            <!-- ── VIEW 1: BẢN ĐỒ LỘ TRÌNH ── -->
+            <div id="tripMapView">
                 <!-- Nút chuyển đổi hướng hiển thị: Lượt đi / Lượt về / Cả hai -->
-                <div class="trip-dir-switch-bar">
-                    <button id="btnTripDirOutbound" class="trip-dir-btn btn-outbound active" onclick="setTripDirectionMode('outbound')">
-                        <span>➡️</span> Lượt đi
-                    </button>
-                    <button id="btnTripDirReturn" class="trip-dir-btn btn-return" onclick="setTripDirectionMode('return')">
-                        <span>↩️</span> Lượt về
-                    </button>
-                    <button id="btnTripDirAll" class="trip-dir-btn btn-all" onclick="setTripDirectionMode('all')" title="Xem cả 2 lượt cùng lúc">
-                        <span>🔄</span> Cả hai
-                    </button>
+                <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                    <div class="trip-dir-switch-bar">
+                        <button id="btnTripDirOutbound" class="trip-dir-btn btn-outbound active" onclick="setTripDirectionMode('outbound')">
+                            <span>➡️</span> Lượt đi
+                        </button>
+                        <button id="btnTripDirReturn" class="trip-dir-btn btn-return" onclick="setTripDirectionMode('return')">
+                            <span>↩️</span> Lượt về
+                        </button>
+                        <button id="btnTripDirAll" class="trip-dir-btn btn-all" onclick="setTripDirectionMode('all')" title="Xem cả 2 lượt cùng lúc">
+                            <span>🔄</span> Cả hai
+                        </button>
+                    </div>
+                </div>
+                <div id="tripDetailMap"
+                    style="width:100%;height:380px;border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
+                </div>
+                <div class="b2b-table-wrap">
+                    <table class="b2b-table">
+                        <thead>
+                            <tr>
+                                <th>Trạm</th>
+                                <th>Địa Điểm / Khách Hàng</th>
+                                <th>Thời Gian Dự Kiến</th>
+                                <th>Hàng Hóa Giao</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalTripStopsBody"></tbody>
+                    </table>
                 </div>
             </div>
-            <div id="tripDetailMap"
-                style="width:100%;height:380px;border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
-            </div>
-            <div class="b2b-table-wrap">
-                <table class="b2b-table">
-                    <thead>
-                        <tr>
-                            <th>Trạm</th>
-                            <th>Địa Điểm / Khách Hàng</th>
-                            <th>Thời Gian Dự Kiến</th>
-                            <th>Hàng Hóa Giao</th>
-                        </tr>
-                    </thead>
-                    <tbody id="modalTripStopsBody"></tbody>
-                </table>
+
+            <!-- ── VIEW 2: MÔ HÌNH XẾP HÀNG 3D & TRANH BIỆN AI ── -->
+            <div id="tripPackingView" style="display:none;">
+                <!-- Top Toolbar: Mode Switcher & Customer Filter & Metrics -->
+                <div class="packing-controls-bar">
+                    <!-- Display Mode Tabs -->
+                    <div class="packing-subtab-bar">
+                        <button class="packing-subtab-pill active" id="btnPackingMode3D" onclick="switchPackingDisplayMode('3d')">
+                            <span>🧊</span> Mô Hình 3D
+                        </button>
+                        <button class="packing-subtab-pill" id="btnPackingMode2D" onclick="switchPackingDisplayMode('2d')">
+                            <span>📐</span> Mặt Cắt 2D
+                        </button>
+                        <button class="packing-subtab-pill" id="btnPackingModeDebate" onclick="switchPackingDisplayMode('debate')">
+                            <span>🤖</span> Hội Đồng AI Tranh Biện
+                            <span id="badgeDebateScore" class="badge" style="background:rgba(52,211,153,0.25);color:var(--green);font-size:0.65rem;padding:1px 6px;">96%</span>
+                        </button>
+                    </div>
+
+                    <!-- Customer Filter Dropdown (User's specific requirement!) -->
+                    <div class="packing-filter-wrap">
+                        <span style="font-size:0.75rem;color:#fbbf24;font-weight:700;">🎯 Lọc Khách Hàng:</span>
+                        <select id="packingCustomerFilter" class="packing-customer-select" onchange="onPackingCustomerFilterChange()">
+                            <option value="all">🌐 Toàn bộ thùng hàng (Tất cả khách)</option>
+                        </select>
+                    </div>
+
+                    <!-- Metrics Badges -->
+                    <div style="display:flex;align-items:center;gap:12px;font-size:0.75rem;">
+                        <span>Kích thước: <strong id="packingVehicleDim" style="color:var(--text);">0×0×0 cm</strong></span>
+                        <span>Lấp đầy: <strong id="packingSpaceUtil" style="color:var(--green);">0%</strong></span>
+                        <span>Tổng tải: <strong id="packingTotalWt" style="color:var(--accent-light);">0 kg</strong></span>
+                    </div>
+
+                    <!-- Left / Right Balance Bar -->
+                    <div class="packing-balance-card">
+                        <div class="packing-balance-header">
+                            <span>⚖️ Cân bằng Trái - Phải</span>
+                            <span id="packingBalanceRatio" style="color:var(--green);">1.00 (Chuẩn)</span>
+                        </div>
+                        <div class="packing-balance-track">
+                            <div class="packing-balance-left" id="packingBarLeft" style="width:50%;"></div>
+                            <div class="packing-balance-right" id="packingBarRight" style="width:50%;"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-dim);">
+                            <span id="packingLeftLabel">Trái: 0 kg (50%)</span>
+                            <span id="packingRightLabel">Phải: 0 kg (50%)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customer Focus Card (Detailed Breakdown for selected customer, e.g. Chị A) -->
+                <div id="packingCustomerDetailCard" class="customer-focus-card inactive">
+                    <div class="customer-focus-header">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:1.1rem;">👤</span>
+                            <div>
+                                <span style="font-size:0.85rem;color:#fbbf24;font-weight:700;">ĐƠN HÀNG CHI TIẾT: </span>
+                                <strong id="custCardCustomerName" style="font-size:0.95rem;color:#fff;">Chị A</strong>
+                                <span id="custCardOrderCode" style="font-size:0.75rem;color:var(--text-dim);margin-left:6px;">(#ORD-101)</span>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <button id="btnToggleCustomerIsolate" onclick="toggleCustomerIsolateMode()" class="b2b-btn" style="background:rgba(251,191,36,0.2);color:#fbbf24;border:1px solid rgba(251,191,36,0.5);font-size:0.72rem;padding:3px 8px;border-radius:6px;cursor:pointer;">
+                                👁️ Chỉ hiện thùng của khách này
+                            </button>
+                            <span class="customer-focus-badge" id="custCardStopSeq">Trạm #2</span>
+                            <span class="customer-focus-badge" id="custCardETA" style="background:#6c63ff;color:#fff;">ETA: 08:35</span>
+                            <button onclick="clearCustomerFilter()" style="background:transparent;border:1px solid rgba(255,255,255,0.2);color:var(--text-dim);border-radius:6px;padding:2px 8px;font-size:0.7rem;cursor:pointer;">✕ Đóng lọc</button>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:12px;margin-top:8px;font-size:0.78rem;">
+                        <div style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px;">
+                            <div style="color:var(--text-dim);font-size:0.7rem;">📦 Số lượng & Tải trọng</div>
+                            <div style="margin-top:2px;"><strong id="custCardQuantity" style="color:#fff;">0 kiện</strong> • <strong id="custCardWeight" style="color:#fbbf24;">0 kg</strong></div>
+                            <div id="custCardVolume" style="color:var(--text-dim);font-size:0.7rem;margin-top:2px;">Thể tích: 0 m³</div>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px;">
+                            <div style="color:var(--text-dim);font-size:0.7rem;">🚪 Trạng thái LIFO / Đường Dỡ Hàng</div>
+                            <div id="custCardLifoStatus" style="margin-top:3px;font-weight:700;color:var(--green);">✅ Đường dỡ thông thoáng</div>
+                            <div id="custCardUnloadOrder" style="color:var(--text-dim);font-size:0.7rem;margin-top:2px;">Thứ tự dỡ: #2</div>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px;">
+                            <div style="color:var(--text-dim);font-size:0.7rem;">📍 Thứ tự xếp từ trong Cabin ra ngoài Cửa</div>
+                            <div id="custCardCoordsSummary" style="margin-top:2px;color:var(--text);line-height:1.4;font-size:0.72rem;max-height:80px;overflow-y:auto;">Đang cập nhật...</div>
+                        </div>
+                    </div>
+
+                    <!-- Bảng các kiện riêng của khách hàng này theo thứ tự bốc xếp từ trong ra -->
+                    <div style="margin-top:10px;overflow-x:auto;">
+                        <table style="width:100%;font-size:0.72rem;border-collapse:collapse;text-align:left;background:rgba(0,0,0,0.2);border-radius:6px;">
+                            <thead>
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:var(--text-dim);">
+                                    <th style="padding:5px 8px;"># Xếp (Load)</th>
+                                    <th style="padding:5px 8px;">Kiện Hàng</th>
+                                    <th style="padding:5px 8px;">Vị Trí Xếp (Từ trong ra)</th>
+                                    <th style="padding:5px 8px;">Tọa Độ 3D (X, Y, Z)</th>
+                                    <th style="padding:5px 8px;">Tầng (Layer)</th>
+                                    <th style="padding:5px 8px;">Khóa Cạnh An Toàn</th>
+                                </tr>
+                            </thead>
+                            <tbody id="custCardItemsTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="custCardAIVerdict" style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(251,191,36,0.25);font-size:0.75rem;color:#cbd5e1;">
+                        🤖 <strong>Đánh giá của Chuyên Gia Xếp Hàng AI:</strong> <span id="custCardVerdictText">Kiện hàng xếp hợp lý.</span>
+                    </div>
+                </div>
+
+                <!-- Interactive Loading Step Slider (Cabin -> Door) -->
+                <div class="packing-loading-sequence-bar" style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:0.78rem;font-weight:700;color:var(--accent-light);">🚚 Trình tự bốc xếp (Cabin ➔ Cửa sau):</span>
+                        <button class="b2b-btn" id="btnPlayLoadingSequence" onclick="toggleLoadingSequencePlay()" style="background:var(--accent);font-size:0.72rem;padding:3px 10px;border-radius:6px;cursor:pointer;">▶️ Diễn hoạt</button>
+                        <button class="b2b-btn" onclick="stepLoadingSequence(-1)" style="background:var(--surface-3);font-size:0.72rem;padding:3px 8px;border-radius:6px;cursor:pointer;">⏮️ Trước</button>
+                        <button class="b2b-btn" onclick="stepLoadingSequence(1)" style="background:var(--surface-3);font-size:0.72rem;padding:3px 8px;border-radius:6px;cursor:pointer;">⏭️ Tiếp</button>
+                        <button class="b2b-btn" id="btnSpeedLoadingSequence" onclick="toggleLoadingSequenceSpeed()" style="background:var(--surface-3);font-size:0.72rem;padding:3px 8px;border-radius:6px;cursor:pointer;" title="Thay đổi tốc độ (1x, 2x, 4x)">⚡ 1x</button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex:1;max-width:380px;min-width:180px;">
+                        <input type="range" id="packingStepSlider" min="1" max="1" value="1" oninput="onLoadingStepSliderChange(this.value)" style="width:100%;accent-color:var(--accent);cursor:pointer;">
+                        <span id="packingStepBadge" style="font-size:0.75rem;font-weight:700;color:#fbbf24;min-width:55px;">Tất cả</span>
+                    </div>
+                    <div id="packingCurrentStepDesc" style="font-size:0.72rem;color:var(--text);background:rgba(0,0,0,0.35);padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);">
+                        Đang hiển thị toàn bộ thùng xe.
+                    </div>
+                </div>
+
+                <!-- Legend Bar -->
+                <div class="packing-legend-bar" style="margin-bottom:10px;padding:6px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border);">
+                    <span style="color:var(--text-dim);font-weight:600;">Chú giải:</span>
+                    <div class="legend-item"><span class="legend-color-box" style="background:#ef4444;"></span> 🔴 Hàng nặng (đáy)</div>
+                    <div class="legend-item"><span class="legend-color-box" style="background:#f59e0b;"></span> 🟡 Dễ vỡ (trên cùng)</div>
+                    <div class="legend-item"><span class="legend-color-box" style="background:#3b82f6;"></span> 🔵 Hàng lạnh (cụm góc)</div>
+                    <div class="legend-item"><span class="legend-color-box" style="background:#10b981;"></span> 🟢 Hàng thường</div>
+                    <div class="legend-item"><span class="legend-color-box" style="background:#fbbf24;box-shadow:0 0 6px #fbbf24;"></span> ⭐ Hàng đang lọc (Phát sáng)</div>
+                    <span style="margin-left:auto;color:var(--text-dim);font-size:0.72rem;">💡 Kéo chuột xoay 360° • Click kiện để soi thông tin</span>
+                </div>
+
+                <!-- ── VIEW CONTAINER 1: 3D THREE.JS CANVAS ── -->
+                <div id="packing3DViewContainer" class="packing-3d-container">
+                    <canvas id="packing3DCanvas"></canvas>
+
+                    <!-- Camera Preset Buttons -->
+                    <div class="packing-camera-bar">
+                        <button class="packing-camera-btn" onclick="setPacking3DCameraPreset('default')" title="Góc phối cảnh 3D mặc định">🎥 3D Tổng thể</button>
+                        <button class="packing-camera-btn" onclick="setPacking3DCameraPreset('rear')" title="Nhìn từ cửa sau vào lòng xe (LIFO)">🚪 Cửa sau (Dỡ)</button>
+                        <button class="packing-camera-btn" onclick="setPacking3DCameraPreset('top')" title="Nhìn từ trần xe xuống">🔝 Nhìn từ trên</button>
+                        <button class="packing-camera-btn" onclick="setPacking3DCameraPreset('side')" title="Nhìn từ cạnh hông thùng xe">↔️ Cạnh hông</button>
+                        <button class="packing-camera-btn" onclick="resetPacking3DControls()" title="Đặt lại góc quay ban đầu">🔄 Đặt lại</button>
+                    </div>
+
+                    <!-- 3D Help / Axis Badge -->
+                    <div class="packing-3d-help-badge">
+                        <span>⬅️ <strong>Cabin</strong> (Xanh lục: Trục X | Đỏ: Trục Z sâu | Xanh dương: Trục Y cao) • <strong>Cửa dỡ sau</strong> ➡️</span>
+                    </div>
+                </div>
+
+                <!-- ── VIEW CONTAINER 2: 2D SLICE CANVAS (Top-Down) ── -->
+                <div id="packing2DViewContainer" class="packing-canvas-container" style="display:none;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px;">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:0.75rem;color:var(--text-dim);font-weight:600;">Xem Lớp:</span>
+                            <div class="packing-layer-pills">
+                                <button class="packing-layer-pill active" id="btnLayerAll" onclick="setPackingLayer('all')">Tất cả</button>
+                                <button class="packing-layer-pill" id="btnLayer1" onclick="setPackingLayer(1)">Lớp 1 (Đáy)</button>
+                                <button class="packing-layer-pill" id="btnLayer2" onclick="setPackingLayer(2)">Lớp 2 (Trên)</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="packing-truck-header">
+                        <span>⬅️ 🚚 <strong>CABIN XE (Phía trước)</strong> — Hàng xếp sâu</span>
+                        <span style="font-size:0.75rem;color:var(--text-dim);font-weight:600;">⬆️ THÀNH XE BÊN TRÁI (Left Wall)</span>
+                        <span><strong>CỬA THÙNG XE (Phía sau)</strong> — LIFO dỡ trước 🚪 ➡️</span>
+                    </div>
+
+                    <canvas id="packingCanvas" width="1200" height="480"></canvas>
+
+                    <div class="packing-truck-footer">
+                        <span>⬅️ Trục trước (Front Axle)</span>
+                        <span style="font-size:0.75rem;color:var(--text-dim);font-weight:600;">⬇️ THÀNH XE BÊN PHẢI (Right Wall)</span>
+                        <span>Trục sau (Rear Axle) ➡️</span>
+                    </div>
+                </div>
+
+                <!-- ── VIEW CONTAINER 3: AI DEBATE COUNCIL PANEL ── -->
+                <div id="packingDebateViewContainer" class="debate-panel-wrap" style="display:none;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                        <div>
+                            <h4 style="font-size:0.95rem;color:#fff;display:flex;align-items:center;gap:8px;">
+                                <span>🤖</span> Hội Đồng AI Tranh Biện Xếp Xe (Proposer vs Opponent)
+                            </h4>
+                            <div style="font-size:0.72rem;color:var(--text-dim);margin-top:3px;">
+                                💾 Tự động đồng bộ với MySQL Database: bảng <code style="color:#60a5fa;">ai_debate_logs</code> & tự phạt lỗi trong <code style="color:#fbbf24;">algorithm_learning_weights</code>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div style="text-align:right;">
+                                <div style="font-size:0.7rem;color:var(--text-dim);">Độ Đồng Thuận (Consensus)</div>
+                                <div id="debateConsensusScoreText" style="font-size:1.1rem;font-weight:700;color:var(--green);">96% ✅ ĐẠT CHUẨN</div>
+                            </div>
+                            <button class="b2b-btn" id="btnTriggerLiveDebate" onclick="triggerAIDebateManual()" style="background:var(--accent);font-size:0.75rem;padding:6px 12px;display:flex;align-items:center;gap:6px;">
+                                <span>🔄</span> Tranh Biện Lại (Live 2 AI)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Dialogue Stream -->
+                    <div id="packingDebateStream" class="debate-stream">
+                        <div style="text-align:center;padding:20px;color:var(--text-dim);">Đang tải biên bản tranh luận giữa 2 AI...</div>
+                    </div>
+                </div>
+
+                <!-- Floating Tooltip -->
+                <div id="packingTooltip" class="packing-tooltip"></div>
+
+                <!-- Smart Collapsible Warnings / Notes Banner -->
+                <div id="packingWarningsBox" class="packing-compact-warnings" style="display:none;">
+                    <div class="warnings-header" onclick="togglePackingWarningsExpanded()">
+                        <div class="warnings-title-wrap">
+                            <span class="warnings-icon">⚠️</span>
+                            <span id="warningsTitleText" class="warnings-title">Lưu ý & Cảnh báo xếp xe</span>
+                            <div id="warningsCategoryChips" class="warnings-chips-wrap"></div>
+                        </div>
+                        <button type="button" id="btnToggleWarningsExpand" class="warnings-expand-btn">
+                            <span id="warningsExpandBtnText">Chi tiết (0)</span> <span id="warningsExpandBtnArrow">▼</span>
+                        </button>
+                    </div>
+                    <div id="warningsDetailsList" class="warnings-details-list" style="display:none;"></div>
+                </div>
+
+                <!-- Packing Items Section: Compact Stops Accordion + Searchable Table -->
+                <div class="packing-items-section">
+                    <!-- Items Toolbar -->
+                    <div class="packing-items-toolbar">
+                        <div class="items-toolbar-left">
+                            <span style="font-size:0.82rem;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+                                <span>📦</span> Chi Tiết Kiện Hàng Trên Xe
+                                <span id="packingTotalItemsBadge" class="badge" style="background:rgba(108,99,255,0.2);color:var(--accent-light);font-size:0.7rem;padding:2px 8px;">0 kiện</span>
+                            </span>
+                            <!-- View Mode Switcher: Grouped by Stop vs Full Table -->
+                            <div class="packing-view-toggle">
+                                <button type="button" class="packing-mode-btn active" id="btnPackingViewGroups" onclick="setPackingItemsViewMode('groups')" title="Gom nhóm gọn gàng theo từng Trạm / Khách hàng">
+                                    🗂️ Theo Trạm
+                                </button>
+                                <button type="button" class="packing-mode-btn" id="btnPackingViewTable" onclick="setPackingItemsViewMode('table')" title="Xem danh sách bảng toàn bộ kiện hàng">
+                                    📋 Bảng Toàn Bộ
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="items-toolbar-right">
+                            <!-- Search Box -->
+                            <div class="packing-search-wrap">
+                                <span style="font-size:0.75rem;color:var(--text-dim);">🔍</span>
+                                <input type="text" id="packingItemSearchInput" class="packing-search-input" placeholder="Tìm kiện, SKU, khách..." oninput="onPackingItemSearchChange(this.value)">
+                                <button type="button" id="btnClearPackingSearch" onclick="clearPackingItemSearch()" style="display:none;background:transparent;border:none;color:var(--text-dim);cursor:pointer;padding:0 4px;font-size:0.75rem;">✕</button>
+                            </div>
+
+                            <!-- Expand / Collapse All for Groups -->
+                            <div id="packingGroupToggleControls" style="display:flex;gap:6px;">
+                                <button type="button" class="b2b-btn" onclick="toggleAllPackingGroups(true)" style="font-size:0.7rem;padding:4px 8px;background:var(--surface-3);" title="Mở rộng tất cả trạm">
+                                    📂 Mở hết
+                                </button>
+                                <button type="button" class="b2b-btn" onclick="toggleAllPackingGroups(false)" style="font-size:0.7rem;padding:4px 8px;background:var(--surface-3);" title="Thu gọn tất cả trạm">
+                                    📁 Thu gọn
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Filter Tags Bar -->
+                    <div class="packing-quick-filters">
+                        <span style="font-size:0.7rem;color:var(--text-dim);font-weight:600;">Lọc nhanh:</span>
+                        <button type="button" class="quick-filter-pill active" id="qf_all" onclick="setPackingQuickFilter('all')">Tất cả (<span id="qf_count_all">0</span>)</button>
+                        <button type="button" class="quick-filter-pill" id="qf_heavy" onclick="setPackingQuickFilter('heavy')">🔴 Nặng (<span id="qf_count_heavy">0</span>)</button>
+                        <button type="button" class="quick-filter-pill" id="qf_fragile" onclick="setPackingQuickFilter('fragile')">🟡 Dễ vỡ (<span id="qf_count_fragile">0</span>)</button>
+                        <button type="button" class="quick-filter-pill" id="qf_cold" onclick="setPackingQuickFilter('cold')">🔵 Lạnh (<span id="qf_count_cold">0</span>)</button>
+                        <button type="button" class="quick-filter-pill" id="qf_blocked" onclick="setPackingQuickFilter('blocked')">⚠️ Bị chặn LIFO (<span id="qf_count_blocked">0</span>)</button>
+                    </div>
+
+                    <!-- Container 1: Grouped Accordion by Stops / Customers (Ultra compact!) -->
+                    <div id="packingStopsGroupContainer" class="packing-stops-accordion"></div>
+
+                    <!-- Container 2: Flat Full Table (Max height 340px with sticky header) -->
+                    <div id="packingFlatTableContainer" class="b2b-table-wrap packing-table-scrollable" style="display:none;">
+                        <table class="b2b-table compact-packing-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:75px;"># Bốc/Dỡ</th>
+                                    <th style="width:145px;">Trạm & Khách</th>
+                                    <th>Kiện Hàng / SKU</th>
+                                    <th style="width:130px;">Quy cách (D×R×C)</th>
+                                    <th style="width:85px;">Trọng lượng</th>
+                                    <th style="width:115px;">Tọa độ 3D</th>
+                                    <th style="width:130px;">Trạng thái dỡ</th>
+                                    <th style="width:110px;">Phân loại</th>
+                                </tr>
+                            </thead>
+                            <tbody id="packingItemsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Modal Thêm Đơn Hàng Mới Thủ Công -->
     <div class="b2b-modal-overlay" id="newOrderModal">
-        <div class="b2b-modal-content" style="max-width:550px;">
+        <div class="b2b-modal-content" style="max-width:580px;">
             <button class="b2b-modal-close" onclick="closeNewOrderModal()">✕</button>
             <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:16px;">➕ Thêm Đơn Hàng B2B Mới</h3>
             <div style="display:flex;flex-direction:column;gap:12px;">
+                <!-- Tên khách hàng -->
                 <div>
                     <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Tên Khách
-                        Hàng / Tiệm</label>
+                        Hàng / Tiệm <span style="color:var(--red);">*</span></label>
                     <input type="text" id="moCustName" class="search-box" style="width:100%;padding:8px 12px;"
                         placeholder="VD: Tạp hóa Hưng Phát">
                 </div>
-                <div>
+                <!-- Địa chỉ giao hàng + autocomplete + map -->
+                <div style="position:relative;">
                     <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Địa Chỉ Giao
-                        Hàng</label>
+                        Hàng <span style="color:var(--red);">*</span></label>
                     <input type="text" id="moCustAddr" class="search-box" style="width:100%;padding:8px 12px;"
-                        placeholder="VD: 150 Lê Lợi, Quận 1, HCM">
+                        placeholder="VD: 150 Lê Lợi, Quận 1, HCM" autocomplete="off"
+                        oninput="onMoSearchInput(this.value)">
+                    <input type="hidden" id="moLat">
+                    <input type="hidden" id="moLon">
+                    <div class="autocomplete-dropdown" id="moAutocompleteDropdown"
+                        style="width:100%; top:60px; z-index:9999;"></div>
+                    <div id="moMap"
+                        style="width:100%; height:180px; margin-top:8px; border-radius:8px; border:1px solid var(--border);"></div>
                 </div>
+                <!-- Tên mặt hàng -->
+                <div>
+                    <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Tên Mặt Hàng <span style="color:var(--red);">*</span></label>
+                    <input type="text" id="moItemName" class="search-box" style="width:100%;padding:8px 12px;"
+                        placeholder="VD: Thùng mì Hảo Hảo, Thùng bia Tiger, Thùng sữa...">
+                </div>
+                <!-- Số lượng + Khối lượng -->
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div>
                         <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Số lượng
-                            (thùng)</label>
+                            (thùng) <span style="color:var(--red);">*</span></label>
                         <input type="number" id="moQty" class="search-box" style="width:100%;padding:8px 12px;"
-                            value="50">
+                            placeholder="VD: 50" min="1">
                     </div>
                     <div>
                         <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Tổng
                             trọng lượng (kg)</label>
                         <input type="number" id="moWeight" class="search-box" style="width:100%;padding:8px 12px;"
-                            value="250">
+                            placeholder="AI sẽ ước lượng" min="0" step="0.1">
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div>
-                        <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Giờ bắt
-                            đầu</label>
-                        <input type="time" id="moTimeStart" class="search-box" style="width:100%;padding:8px 12px;"
-                            value="08:00">
+                <!-- AI Ước Lượng (sau qty + weight) -->
+                <button type="button" class="btn-b2b" id="moAiEstimateBtn"
+                    style="justify-content:center;background:linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.2));border-color:rgba(139,92,246,0.4);"
+                    onclick="autoEstimateNewOrderFull()">
+                    ✨ AI Ước Lượng Kích Thước & Khối Lượng
+                </button>
+                <!-- Kích thước kiện hàng -->
+                <div style="background:var(--surface-2);padding:10px;border-radius:8px;border:1px solid var(--border);">
+                    <span style="font-size:0.75rem;font-weight:600;color:var(--text);display:block;margin-bottom:8px;">📦 Kích Thước Kiện Hàng (cm)</span>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--text-dim);">Dài (cm)</label>
+                            <input type="number" id="moItemDepth" class="search-box" style="width:100%;padding:6px;" placeholder="40">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--text-dim);">Rộng (cm)</label>
+                            <input type="number" id="moItemWidth" class="search-box" style="width:100%;padding:6px;" placeholder="35">
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--text-dim);">Cao (cm)</label>
+                            <input type="number" id="moItemHeight" class="search-box" style="width:100%;padding:6px;" placeholder="25">
+                        </div>
                     </div>
-                    <div>
-                        <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Giờ kết
-                            thúc</label>
-                        <input type="time" id="moTimeEnd" class="search-box" style="width:100%;padding:8px 12px;"
-                            value="17:00">
+                    <div style="display:flex;gap:14px;margin-top:8px;font-size:0.75rem;">
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="moItemHeavy"> 🔴 Hàng nặng
+                        </label>
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="moItemFragile"> 🟡 Dễ vỡ
+                        </label>
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="moItemCold"> 🔵 Hàng lạnh
+                        </label>
                     </div>
                 </div>
+                <!-- Ngày đặt hàng -->
                 <div>
                     <label style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;display:block;">Ngày Đặt Hàng</label>
                     <input type="date" id="moDate" class="search-box" style="width:100%;padding:8px 12px;">
                 </div>
+                <!-- Giao hàng gấp -->
+                <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                    <input type="checkbox" id="moIsUrgent" style="width:16px;height:16px;cursor:pointer;">
+                    <label for="moIsUrgent" style="font-size:0.85rem;color:var(--red);font-weight:700;cursor:pointer;">🚨 Giao Hàng Gấp (Xử lý ngay)</label>
+                </div>
+                <!-- Validation errors -->
+                <div id="moValidationErrors" style="display:none;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:8px;padding:10px;font-size:0.8rem;color:var(--red);"></div>
+                <!-- Submit -->
                 <button class="btn-b2b btn-b2b-primary" style="margin-top:10px;justify-content:center;"
                     onclick="saveManualNewOrder()">
                     <span>💾</span> Lưu Đơn Hàng
@@ -3116,6 +4158,31 @@
                 const data = await resp.json();
                 if (data.success) {
                     currentB2BOrders = data.orders || [];
+                    
+                    // Cập nhật số liệu summary bar dựa trên DB thực tế
+                    let scheduledCount = 0;
+                    let distantCount = 0;
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    
+                    currentB2BOrders.forEach(o => {
+                        if (o.status === 'scheduled') scheduledCount++;
+                        if (o.delivery_date_preferred) {
+                            const dDate = new Date(o.delivery_date_preferred);
+                            const diffDays = (dDate - today) / (1000 * 60 * 60 * 24);
+                            if (diffDays > 6) distantCount++;
+                        }
+                    });
+                    
+                    const elSumOrders = document.getElementById('sumOrders');
+                    if (elSumOrders) elSumOrders.textContent = currentB2BOrders.length;
+                    
+                    const elSumScheduled = document.getElementById('sumScheduled');
+                    if (elSumScheduled) elSumScheduled.textContent = scheduledCount;
+                    
+                    const elSumDistant = document.getElementById('sumDistantOrders');
+                    if (elSumDistant) elSumDistant.textContent = distantCount;
+
                     renderB2BOrdersTable();
                 }
             } catch (e) {
@@ -3151,6 +4218,15 @@
             let list = currentB2BOrders.slice();
             if (currentB2BFilter !== 'all') list = list.filter(o => (o.source || '').toLowerCase().includes(currentB2BFilter));
 
+            const searchVal = document.getElementById('b2bSearchInput')?.value.toLowerCase().trim();
+            if (searchVal) {
+                list = list.filter(o => 
+                    (o.order_code || '').toLowerCase().includes(searchVal) ||
+                    (o.customer_name || '').toLowerCase().includes(searchVal) ||
+                    (o.customer_address || '').toLowerCase().includes(searchVal)
+                );
+            }
+
             function isMissingInfo(o) {
                 const od = o.order_date || o.delivery_date_preferred;
                 return !o.customer_name || !o.customer_address || !o.item_summary || !o.total_quantity || !od;
@@ -3180,21 +4256,31 @@
 
             if (list.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:30px;">
-            Chưa có đơn hàng nào. Hãy bấm <strong>[🌱 Nạp 10 Đơn Mẫu]</strong> hoặc nhắn tin cho Chatbot AI để tạo đơn!
+            Chưa có đơn hàng nào. Hãy bấm <strong>[➕ Thêm Đơn Hàng]</strong> hoặc nhắn tin cho Chatbot AI để tạo đơn!
         </td></tr>`;
                 return;
             }
 
+            const now = new Date();
             tbody.innerHTML = list.map(o => {
                 const source = ({ chatbot: '🤖 Chatbot', messenger: '💬 Messenger', warehouse: '🏭 Kho', excel: '📊 Excel', manual: '⌨️ Nhập tay', file_upload: '📁 File' })[o.source] || o.source || 'Khác';
                 const missing = isMissingInfo(o);
-                const trStyle = missing ? 'background-color:rgba(231, 76, 60, 0.08);' : '';
+                
+                // Highlight new orders (created within the last 3 minutes)
+                const createdDate = o.created_at ? new Date(o.created_at) : null;
+                const isNew = createdDate && (now - createdDate) < 3 * 60 * 1000;
+                
+                let trStyle = '';
+                if (missing) trStyle = 'background-color:rgba(231, 76, 60, 0.08);';
+                else if (isNew) trStyle = 'background-color:rgba(46, 204, 113, 0.15); border-left:3px solid var(--green);';
+
                 const missingIcon = missing ? '<span title="Đơn hàng đang thiếu thông tin cần bổ sung" style="color:#e74c3c;margin-right:5px;cursor:help;">⚠️</span>' : '';
+                const newIcon = isNew ? '<span title="Đơn hàng mới" style="color:var(--green);margin-right:5px;font-size:0.7rem;">✨ Mới</span>' : '';
                 const orderDateDisplay = o.order_date || o.delivery_date_preferred || 'Chưa chọn';
 
                 return `
-            <tr style="${trStyle}">
-                <td>${missingIcon}<span class="order-code-badge">${o.order_code}</span></td>
+            <tr style="${trStyle}" id="order-row-${o.id}">
+                <td>${missingIcon}${newIcon}<span class="order-code-badge">${o.order_code}</span></td>
                 <td><strong>${o.customer_name || '<span style="color:#e74c3c">Chưa có tên</span>'}</strong></td>
                 <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${o.customer_address || ''}">${o.customer_address || '<span style="color:#e74c3c">Chưa có địa chỉ</span>'}</td>
                 <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${o.item_summary || ''}">${o.item_summary || '<span style="color:#e74c3c">Chưa có mặt hàng</span>'}</td>
@@ -3409,29 +4495,183 @@
         }
 
         // ── Manual New Order Modal ──
+        let moMapObj = null;
+        let moMarker = null;
+        let moAutocompleteTimer = null;
+        let moAutocompleteResults = [];
+
         function openNewOrderModal() {
             const moDate = document.getElementById('moDate');
             if (moDate && !moDate.value) {
                 moDate.value = new Date().toISOString().slice(0, 10);
             }
+            // Reset validation errors
+            const errDiv = document.getElementById('moValidationErrors');
+            if (errDiv) { errDiv.style.display = 'none'; errDiv.innerHTML = ''; }
+
             document.getElementById('newOrderModal').classList.add('visible');
+
+            // Init map (once)
+            setTimeout(() => {
+                if (!moMapObj) {
+                    moMapObj = L.map('moMap').setView([10.762622, 106.660172], 12);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        maxZoom: 19
+                    }).addTo(moMapObj);
+
+                    moMapObj.on('click', async (e) => {
+                        const lat = e.latlng.lat;
+                        const lon = e.latlng.lng;
+                        updateMoMarker(lat, lon);
+                        try {
+                            const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                            const d = await r.json();
+                            if (d && d.display_name) {
+                                document.getElementById('moCustAddr').value = d.display_name;
+                            }
+                        } catch (ex) { }
+                    });
+                }
+                moMapObj.invalidateSize();
+            }, 300);
         }
         function closeNewOrderModal() {
             document.getElementById('newOrderModal').classList.remove('visible');
+            const dd = document.getElementById('moAutocompleteDropdown');
+            if (dd) dd.classList.remove('visible');
         }
+
+        function updateMoMarker(lat, lon) {
+            document.getElementById('moLat').value = lat;
+            document.getElementById('moLon').value = lon;
+            if (moMarker && moMapObj) moMapObj.removeLayer(moMarker);
+            if (moMapObj) moMarker = L.marker([lat, lon]).addTo(moMapObj);
+        }
+
+        function onMoSearchInput(val) {
+            clearTimeout(moAutocompleteTimer);
+            const dd = document.getElementById('moAutocompleteDropdown');
+            if (!val || val.length < 3) {
+                dd.classList.remove('visible');
+                return;
+            }
+            moAutocompleteTimer = setTimeout(async () => {
+                try {
+                    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&countrycodes=vn&limit=5`);
+                    moAutocompleteResults = await resp.json();
+                    if (moAutocompleteResults.length === 0) {
+                        dd.innerHTML = '<div style="padding:10px;color:gray;">Không tìm thấy kết quả</div>';
+                    } else {
+                        dd.innerHTML = moAutocompleteResults.map((r, i) => `
+                            <div class="autocomplete-item" onclick="selectMoAutocomplete(${i})">
+                                <div style="font-weight:600;">${r.display_name.split(',')[0]}</div>
+                                <div style="font-size:0.8rem;color:gray;">${r.display_name}</div>
+                            </div>
+                        `).join('');
+                    }
+                    dd.classList.add('visible');
+                } catch (e) { }
+            }, 500);
+        }
+
+        function selectMoAutocomplete(idx) {
+            const r = moAutocompleteResults[idx];
+            document.getElementById('moCustAddr').value = r.display_name;
+            document.getElementById('moAutocompleteDropdown').classList.remove('visible');
+            const lat = parseFloat(r.lat);
+            const lon = parseFloat(r.lon);
+            updateMoMarker(lat, lon);
+            if (moMapObj) moMapObj.setView([lat, lon], 16);
+        }
+
+        async function autoEstimateNewOrderFull() {
+            const name = document.getElementById('moItemName')?.value.trim();
+            const qty = parseInt(document.getElementById('moQty')?.value) || 0;
+            if (!name) {
+                alert('Vui lòng nhập tên mặt hàng trước khi ước lượng.');
+                return;
+            }
+            const btn = document.getElementById('moAiEstimateBtn');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Đang ước lượng...';
+            try {
+                const resp = await fetch('/api/packing/dimensions/estimate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_name: name, quantity: qty })
+                });
+                const res = await resp.json();
+                if (res.success && res.dimensions) {
+                    const d = res.dimensions;
+                    if (d.depth_cm) document.getElementById('moItemDepth').value = d.depth_cm;
+                    if (d.width_cm) document.getElementById('moItemWidth').value = d.width_cm;
+                    if (d.height_cm) document.getElementById('moItemHeight').value = d.height_cm;
+                    document.getElementById('moItemHeavy').checked = !!d.is_heavy;
+                    document.getElementById('moItemFragile').checked = !!d.is_fragile;
+                    document.getElementById('moItemCold').checked = !!d.requires_cold;
+                    // Ước lượng khối lượng:
+                    if (d.weight_kg && qty > 0) {
+                        document.getElementById('moWeight').value = Math.round(d.weight_kg * qty * 10) / 10;
+                    } else if (d.estimated_weight_kg) {
+                        document.getElementById('moWeight').value = d.estimated_weight_kg;
+                    }
+                }
+                btn.innerHTML = '✅ Đã ước lượng xong!';
+                setTimeout(() => { btn.innerHTML = '✨ AI Ước Lượng Kích Thước & Khối Lượng'; }, 2000);
+            } catch (err) {
+                console.error('Error estimating:', err);
+                btn.innerHTML = '❌ Lỗi ước lượng';
+                setTimeout(() => { btn.innerHTML = '✨ AI Ước Lượng Kích Thước & Khối Lượng'; }, 2000);
+            }
+            btn.disabled = false;
+        }
+
         async function saveManualNewOrder() {
             const name = document.getElementById('moCustName').value.trim();
             const addr = document.getElementById('moCustAddr').value.trim();
-            const qty = parseInt(document.getElementById('moQty').value) || 50;
-            const wt = parseFloat(document.getElementById('moWeight').value) || 250;
-            const tStart = document.getElementById('moTimeStart').value || '08:00';
-            const tEnd = document.getElementById('moTimeEnd').value || '17:00';
+            const itemName = document.getElementById('moItemName')?.value.trim();
+            const qty = parseInt(document.getElementById('moQty').value) || 0;
+            const wt = parseFloat(document.getElementById('moWeight').value) || 0;
+            const lat = document.getElementById('moLat')?.value;
+            const lon = document.getElementById('moLon')?.value;
             const orderDateVal = document.getElementById('moDate')?.value || new Date().toISOString().slice(0, 10);
 
-            if (!name || !addr) {
-                alert('Vui lòng nhập tên khách hàng và địa chỉ.');
+            // Validation
+            const errors = [];
+            if (!name) errors.push('• Tên khách hàng / tiệm là bắt buộc');
+            if (!addr) errors.push('• Địa chỉ giao hàng là bắt buộc');
+            if (!lat || !lon) errors.push('• Chưa xác định tọa độ — hãy chọn địa chỉ gợi ý hoặc bấm trên bản đồ');
+            if (!itemName) errors.push('• Tên mặt hàng là bắt buộc');
+            if (qty <= 0) errors.push('• Số lượng phải lớn hơn 0');
+            if (wt <= 0) errors.push('• Trọng lượng phải lớn hơn 0 — bấm "AI Ước Lượng" nếu không biết');
+
+            const errDiv = document.getElementById('moValidationErrors');
+            if (errors.length > 0) {
+                errDiv.innerHTML = errors.join('<br>');
+                errDiv.style.display = 'block';
                 return;
             }
+            errDiv.style.display = 'none';
+
+            const depthCm = parseFloat(document.getElementById('moItemDepth')?.value) || 40;
+            const widthCm = parseFloat(document.getElementById('moItemWidth')?.value) || 35;
+            const heightCm = parseFloat(document.getElementById('moItemHeight')?.value) || 25;
+            const isHeavy = document.getElementById('moItemHeavy')?.checked ? 1 : 0;
+            const isFragile = document.getElementById('moItemFragile')?.checked ? 1 : 0;
+            const requiresCold = document.getElementById('moItemCold')?.checked ? 1 : 0;
+
+            const items = [{
+                sku: 'SKU-' + Math.random().toString(36).substring(2, 7).toUpperCase(),
+                item_name: itemName,
+                quantity: qty,
+                weight_kg: wt,
+                width_cm: widthCm,
+                depth_cm: depthCm,
+                height_cm: heightCm,
+                is_heavy: isHeavy,
+                is_fragile: isFragile,
+                requires_cold: requiresCold
+            }];
 
             try {
                 const resp = await fetch('/api/b2b/orders', {
@@ -3440,19 +4680,29 @@
                     body: JSON.stringify({
                         customer_name: name,
                         customer_address: addr,
+                        customer_lat: lat ? parseFloat(lat) : null,
+                        customer_lon: lon ? parseFloat(lon) : null,
                         total_quantity: qty,
                         total_weight_kg: wt,
-                        time_window_start: tStart,
-                        time_window_end: tEnd,
+                        time_window_start: '08:00',
+                        time_window_end: '17:00',
                         order_date: orderDateVal,
-                        delivery_date_preferred: orderDateVal
+                        delivery_date_preferred: orderDateVal,
+                        is_urgent: document.getElementById('moIsUrgent')?.checked ? 1 : 0,
+                        items: items
                     })
                 });
                 const data = await resp.json();
                 if (data.success) {
                     closeNewOrderModal();
                     await loadB2BOrders();
-                    addBotChatMessage(`🎉 **Đã lưu đơn hàng \`${data.order.order_code}\`** cho khách **${name}** (${qty} thùng)!`);
+                    addBotChatMessage(`🎉 **Đã lưu đơn hàng \`${data.order.order_code}\`** cho khách **${name}** (${qty} thùng)! Kích thước kiện: ${depthCm}×${widthCm}×${heightCm} cm.`);
+                    if (data.run_id) {
+                        addBotChatMessage(`⚡ **Đơn gấp / Đủ 50 đơn:** Tự động kích hoạt tối ưu...`);
+                        const pBox = document.getElementById('b2bProgressBox');
+                        if (pBox) pBox.classList.add('visible');
+                        pollB2BOptimizeStatus(data.run_id);
+                    }
                 }
             } catch (e) {
                 alert('Lỗi lưu đơn hàng');
@@ -3474,13 +4724,15 @@
             fillEl.style.width = '5%';
             stageEl.textContent = 'Khởi động mô hình...';
 
-            const days = parseInt(document.getElementById('b2bPlanningDays').value) || 5;
+            const days = 5; // Mặc định 5 ngày (T2-T6)
+            const limitInput = document.getElementById('b2bOrderLimit');
+            const limit = limitInput && limitInput.value ? parseInt(limitInput.value) : null;
 
             try {
                 const resp = await fetch('/api/b2b/optimize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ planning_days: days })
+                    body: JSON.stringify({ planning_days: days, order_limit: limit })
                 });
                 const data = await resp.json();
                 if (!data.success) {
@@ -3489,104 +4741,126 @@
                     return;
                 }
 
-                const runId = data.run_id;
-                // Animated Progress State
-                let displayPct = 5;
-                let targetPct = 5;
-                let lastServerPct = 5;
-                let creepTimer = null;
-                let rafId = null;
-
-                // Lerp animation: smoothly animate displayPct towards targetPct
-                function animateProgress() {
-                    const diff = targetPct - displayPct;
-                    if (Math.abs(diff) > 0.1) {
-                        displayPct += diff * 0.08; // Ease towards target
-                    } else {
-                        displayPct = targetPct;
-                    }
-                    const rounded = Math.round(displayPct);
-                    pctEl.textContent = `${rounded}%`;
-                    fillEl.style.width = `${displayPct}%`;
-                    if (displayPct < targetPct || targetPct < 100) {
-                        rafId = requestAnimationFrame(animateProgress);
-                    }
-                }
-
-                // Fake sub-progress: creep +0.3% every 400ms between server updates
-                function startCreep() {
-                    if (creepTimer) clearInterval(creepTimer);
-                    creepTimer = setInterval(() => {
-                        // Creep slowly, never exceed server value + 3%, max 95%
-                        const maxCreep = Math.min(lastServerPct + 3, 95);
-                        if (targetPct < maxCreep) {
-                            targetPct = Math.min(targetPct + 0.3, maxCreep);
-                        }
-                    }, 400);
-                }
-
-                function stopCreep() {
-                    if (creepTimer) { clearInterval(creepTimer); creepTimer = null; }
-                    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-                }
-
-                // Start animation loop and creep
-                rafId = requestAnimationFrame(animateProgress);
-                startCreep();
-
-                // Poll status
-                if (b2bOptimizePollInterval) clearInterval(b2bOptimizePollInterval);
-                b2bOptimizePollInterval = setInterval(async () => {
-                    try {
-                        const sResp = await fetch(`/api/b2b/optimize-status/${runId}`);
-                        const sData = await sResp.json();
-                        if (sData.success && sData.run) {
-                            const r = sData.run;
-                            const serverPct = Math.max(5, r.progress_pct || 0);
-                            lastServerPct = serverPct;
-                            // Set target — lerp will animate smoothly towards it
-                            targetPct = serverPct;
-                            if (r.current_stage) stageEl.textContent = r.current_stage;
-
-                            if (r.status === 'completed') {
-                                clearInterval(b2bOptimizePollInterval);
-                                stopCreep();
-                                targetPct = 100;
-                                displayPct = 100;
-                                pctEl.textContent = '100%';
-                                fillEl.style.width = '100%';
-
-                                const resResp = await fetch(`/api/b2b/optimize-result/${runId}`);
-                                const resJson = await resResp.json();
-                                if (resJson.success && resJson.result) {
-                                    currentB2BResult = resJson.result;
-                                    renderB2BResults(resJson.result);
-                                }
-                                setTimeout(() => {
-                                    pBox.classList.remove('visible');
-                                    resetOptimizeUI();
-                                }, 800);
-                            } else if (r.status === 'failed') {
-                                clearInterval(b2bOptimizePollInterval);
-                                stopCreep();
-                                alert('Tối ưu hóa thất bại: ' + (r.error_message || ''));
-                                resetOptimizeUI();
-                            }
-                        }
-                    } catch (err) {
-                        console.error('Poll error:', err);
-                    }
-                }, 600);
+                pollB2BOptimizeStatus(data.run_id);
             } catch (e) {
                 alert('Lỗi kết nối server');
                 resetOptimizeUI();
             }
         }
 
+        function pollB2BOptimizeStatus(runId) {
+            const btn = document.getElementById('btnRunB2BOptimize');
+            const pBox = document.getElementById('b2bProgressBox');
+            const stageEl = document.getElementById('b2bProgressStage');
+            const pctEl = document.getElementById('b2bProgressPct');
+            const fillEl = document.getElementById('b2bProgressFill');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> Đang tối ưu...';
+            pBox.classList.add('visible');
+
+            // Animated Progress State
+            let displayPct = 5;
+            let targetPct = 5;
+            let lastServerPct = 5;
+            let creepTimer = null;
+            let rafId = null;
+
+            // Lerp animation: smoothly animate displayPct towards targetPct
+            function animateProgress() {
+                const diff = targetPct - displayPct;
+                if (Math.abs(diff) > 0.1) {
+                    displayPct += diff * 0.08; // Ease towards target
+                } else {
+                    displayPct = targetPct;
+                }
+                const rounded = Math.round(displayPct);
+                pctEl.textContent = `${rounded}%`;
+                fillEl.style.width = `${displayPct}%`;
+                if (displayPct < targetPct || targetPct < 100) {
+                    rafId = requestAnimationFrame(animateProgress);
+                }
+            }
+
+            // Fake sub-progress: creep +0.3% every 400ms between server updates
+            function startCreep() {
+                if (creepTimer) clearInterval(creepTimer);
+                creepTimer = setInterval(() => {
+                    // Creep slowly, never exceed server value + 3%, max 95%
+                    const maxCreep = Math.min(lastServerPct + 3, 95);
+                    if (targetPct < maxCreep) {
+                        targetPct = Math.min(targetPct + 0.3, maxCreep);
+                    }
+                }, 400);
+            }
+
+            function stopCreep() {
+                if (creepTimer) { clearInterval(creepTimer); creepTimer = null; }
+                if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+            }
+
+            // Start animation loop and creep
+            rafId = requestAnimationFrame(animateProgress);
+            startCreep();
+
+            // Poll status
+            if (b2bOptimizePollInterval) clearInterval(b2bOptimizePollInterval);
+            b2bOptimizePollInterval = setInterval(async () => {
+                try {
+                    const sResp = await fetch(`/api/b2b/optimize-status/${runId}`);
+                    const sData = await sResp.json();
+                    if (sData.success && sData.run) {
+                        const r = sData.run;
+                        const serverPct = Math.max(5, r.progress_pct || 0);
+                        lastServerPct = serverPct;
+                        // Set target — lerp will animate smoothly towards it
+                        targetPct = serverPct;
+                        if (r.current_stage) stageEl.textContent = r.current_stage;
+
+                        if (r.status === 'completed') {
+                            clearInterval(b2bOptimizePollInterval);
+                            stopCreep();
+                            targetPct = 100;
+                            displayPct = 100;
+                            pctEl.textContent = '100%';
+                            fillEl.style.width = '100%';
+
+                            const resResp = await fetch(`/api/b2b/optimize-result/${runId}`);
+                            const resJson = await resResp.json();
+                            if (resJson.success && resJson.result) {
+                                currentB2BResult = resJson.result;
+                                renderB2BResults(resJson.result);
+                            }
+                            setTimeout(() => {
+                                pBox.classList.remove('visible');
+                                // Nút Tối ưu bị mờ/khóa đi theo yêu cầu, chỉ sáng lại khi Reset (thêm class disabled)
+                                btn.disabled = true;
+                                btn.innerHTML = '<span>🔒</span> Đã Tối Ưu (Khóa)';
+                            }, 800);
+                        } else if (r.status === 'failed') {
+                            clearInterval(b2bOptimizePollInterval);
+                            stopCreep();
+                            alert('Tối ưu hóa thất bại: ' + (r.error_message || ''));
+                            resetOptimizeUI();
+                        }
+                    }
+                } catch (err) {
+                    console.error('Poll error:', err);
+                }
+            }, 600);
+        }
+
         function resetOptimizeUI() {
             const btn = document.getElementById('btnRunB2BOptimize');
             btn.disabled = false;
             btn.innerHTML = '<span>🚀</span> Chạy Phân Bổ & Tối Ưu';
+        }
+
+        async function resetB2BData() {
+            if (!confirm('Bạn có chắc chắn muốn reset toàn bộ tiến trình tối ưu và làm mới giao diện không?')) return;
+            resetOptimizeUI();
+            document.getElementById('b2bResultsCard').style.display = 'none';
+            addBotChatMessage('🔄 Đã reset trạng thái dự án. Bạn có thể tiến hành Tối Ưu lại.');
         }
 
         function switchResultTab(tabName, btn) {
@@ -3614,8 +4888,10 @@
             document.getElementById('kpiSavedHours').textContent = `-${kpis.saved_time_hours || 0} giờ`;
             document.getElementById('kpiTotalTime').textContent = `Tổng thời gian: ${kpis.total_time_hours || 0}h`;
 
-            // Summary bar ngắn gọn (luôn hiện)
+            // Update stats
             document.getElementById('sumOrders').textContent = kpis.total_orders || 0;
+            const elSumScheduled = document.getElementById('sumScheduled');
+            if (elSumScheduled) elSumScheduled.textContent = kpis.total_orders || 0;
             document.getElementById('sumDistantOrders').textContent = res.distant_orders_count || 0;
             document.getElementById('sumVehicles').textContent = kpis.vehicles_used || 0;
             document.getElementById('sumKm').textContent = kpis.total_distance_km || 0;
@@ -3787,6 +5063,8 @@
                 if (btn) btn.textContent = '📋 Xem chi tiết đơn gốc (Excel)';
                 currentTripDayIdx = dayIdx;
                 currentTripRouteIdx = routeIdx;
+
+                switchTripDetailSubtab('map');
 
                 // Show modal on first open
                 document.getElementById('tripDetailModal').classList.add('visible');
@@ -4012,6 +5290,1556 @@
 
         function closeTripModal() {
             document.getElementById('tripDetailModal').classList.remove('visible');
+        }
+
+        // ══════════════════════════════════════════════════════
+        // 📦 PHASE 2: BIN PACKING 2D VISUALIZER & CONTROLLER
+        // ══════════════════════════════════════════════════════
+        // ══════════════════════════════════════════════════════
+        // 🧊 3D BIN PACKING VISUALIZER & AI DEBATE CONTROLLER
+        // ══════════════════════════════════════════════════════
+        let currentPackingLayer = 'all';
+        let currentPackingPlan = null;
+        let activeHoveredPackingItem = null;
+        let packingRenderBoxes = [];
+        let isPackingCanvasListenersAttached = false;
+        let currentPackingDisplayMode = '3d';
+        let selectedPackingCustomer = 'all';
+
+        // Three.js 3D Scene Variables
+        let packing3DScene = null;
+        let packing3DCamera = null;
+        let packing3DRenderer = null;
+        let packing3DControls = null;
+        let packing3DMeshes = [];
+        let packing3DAnimationId = null;
+        let isPacking3DInitialized = false;
+        let packing3DRaycaster = null;
+        let packing3DMouse = null;
+        let packing3DTruckDims = { width: 190, depth: 430, height: 180 };
+
+        function switchTripDetailSubtab(tab) {
+            const btnMap = document.getElementById('btnSubtabMap');
+            const btnPacking = document.getElementById('btnSubtabPacking');
+            const viewMap = document.getElementById('tripMapView');
+            const viewPacking = document.getElementById('tripPackingView');
+
+            if (tab === 'map') {
+                btnMap?.classList.add('active');
+                btnPacking?.classList.remove('active');
+                if (viewMap) viewMap.style.display = 'block';
+                if (viewPacking) viewPacking.style.display = 'none';
+                if (tripDetailLeafletMap) {
+                    setTimeout(() => tripDetailLeafletMap.invalidateSize(), 150);
+                }
+            } else if (tab === 'packing') {
+                btnPacking?.classList.add('active');
+                btnMap?.classList.remove('active');
+                if (viewMap) viewMap.style.display = 'none';
+                if (viewPacking) viewPacking.style.display = 'block';
+                renderTripPackingPlan(currentTripDayIdx, currentTripRouteIdx);
+            }
+        }
+
+        function switchPackingDisplayMode(mode) {
+            currentPackingDisplayMode = mode;
+            document.getElementById('btnPackingMode3D')?.classList.toggle('active', mode === '3d');
+            document.getElementById('btnPackingMode2D')?.classList.toggle('active', mode === '2d');
+            document.getElementById('btnPackingModeDebate')?.classList.toggle('active', mode === 'debate');
+
+            const view3D = document.getElementById('packing3DViewContainer');
+            const view2D = document.getElementById('packing2DViewContainer');
+            const viewDebate = document.getElementById('packingDebateViewContainer');
+
+            if (view3D) view3D.style.display = (mode === '3d') ? 'block' : 'none';
+            if (view2D) view2D.style.display = (mode === '2d') ? 'block' : 'none';
+            if (viewDebate) viewDebate.style.display = (mode === 'debate') ? 'block' : 'none';
+
+            if (mode === '3d') {
+                setTimeout(() => {
+                    resizePacking3DRenderer();
+                    if (currentPackingPlan) render3DPackingPlan();
+                }, 60);
+            } else if (mode === '2d') {
+                drawPackingCanvas();
+            }
+        }
+
+        function setPackingLayer(layer) {
+            currentPackingLayer = layer;
+            document.getElementById('btnLayerAll')?.classList.toggle('active', layer === 'all');
+            document.getElementById('btnLayer1')?.classList.toggle('active', layer === 1);
+            document.getElementById('btnLayer2')?.classList.toggle('active', layer === 2);
+            drawPackingCanvas();
+            renderPackingTable();
+        }
+
+        async function renderTripPackingPlan(dayIdx, routeIdx) {
+            if (!currentB2BResult) return;
+            if (dayIdx === undefined || dayIdx < 0) dayIdx = currentTripDayIdx;
+            if (routeIdx === undefined || routeIdx < 0) routeIdx = currentTripRouteIdx;
+            currentTripDayIdx = dayIdx;
+            currentTripRouteIdx = routeIdx;
+
+            const day = currentB2BResult.schedule[dayIdx];
+            if (!day) return;
+            const route = day.routes[routeIdx];
+            if (!route) return;
+
+            let plan = route.packing_plan;
+            if (!plan) {
+                try {
+                    const resp = await fetch('/api/packing/compute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            vehicle_id: route.vehicle_id || route.vehicle_name,
+                            stops: route.stops,
+                            total_load_kg: route.total_load_kg
+                        })
+                    });
+                    const res = await resp.json();
+                    if (res.success && res.packing_plan) {
+                        plan = res.packing_plan;
+                        route.packing_plan = plan;
+                    }
+                } catch (e) {
+                    console.error('Error fetching packing plan:', e);
+                }
+            }
+
+            currentPackingPlan = plan;
+            if (!plan) {
+                const tbody = document.getElementById('packingItemsTableBody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:25px;color:var(--text-dim);">Không tìm thấy dữ liệu kiện hàng xếp xe.</td></tr>';
+                return;
+            }
+
+            // Update Metrics Bar
+            const truckDepth = plan.truck_depth || plan.truck_length || 430;
+            const truckWidth = plan.truck_width || 190;
+            const truckHeight = plan.truck_height || 180;
+            packing3DTruckDims = { width: truckWidth, depth: truckDepth, height: truckHeight };
+
+            const dimEl = document.getElementById('packingVehicleDim');
+            if (dimEl) dimEl.textContent = `${truckDepth}×${truckWidth}×${truckHeight} cm`;
+
+            const utilEl = document.getElementById('packingSpaceUtil');
+            if (utilEl) utilEl.textContent = `${plan.space_utilization_pct || 0}%`;
+
+            const wtEl = document.getElementById('packingTotalWt');
+            if (wtEl) wtEl.textContent = `${Math.round(plan.total_packed_weight_kg || 0)} kg`;
+
+            // Balance Bar
+            const balRatio = plan.weight_balance_ratio !== undefined ? plan.weight_balance_ratio : 1.0;
+            const leftKg = Math.round(plan.left_weight_kg || 0);
+            const rightKg = Math.round(plan.right_weight_kg || 0);
+            const totalKg = (leftKg + rightKg) || 1;
+            const leftPct = Math.round((leftKg / totalKg) * 100);
+            const rightPct = 100 - leftPct;
+
+            const ratioEl = document.getElementById('packingBalanceRatio');
+            if (ratioEl) {
+                let statusText = 'Cân bằng chuẩn ✅';
+                let statusColor = 'var(--green)';
+                if (balRatio < 0.7) {
+                    statusText = 'Lệch nhiều 🔴';
+                    statusColor = 'var(--red)';
+                } else if (balRatio < 0.85) {
+                    statusText = 'Lệch nhẹ ⚠️';
+                    statusColor = 'var(--yellow)';
+                }
+                ratioEl.textContent = `${balRatio.toFixed(2)} (${statusText})`;
+                ratioEl.style.color = statusColor;
+            }
+
+            const barL = document.getElementById('packingBarLeft');
+            const barR = document.getElementById('packingBarRight');
+            if (barL) barL.style.width = `${leftPct}%`;
+            if (barR) barR.style.width = `${rightPct}%`;
+
+            const lblL = document.getElementById('packingLeftLabel');
+            const lblR = document.getElementById('packingRightLabel');
+            if (lblL) lblL.textContent = `Trái: ${leftKg} kg (${leftPct}%)`;
+            if (lblR) lblR.textContent = `Phải: ${rightKg} kg (${rightPct}%)`;
+
+            // Smart Compact Warnings Box
+            updatePackingWarningsUI(plan.warnings || []);
+
+            // Populate Customer Filter dropdown
+            populatePackingCustomerFilter();
+
+            // Initialize 3D scene & render
+            init3DPackingScene();
+            render3DPackingPlan();
+            initLoadingSequenceSlider();
+
+            // Render AI Debate Transcript
+            if (plan.debate_summary) {
+                renderDebateTranscript(plan.debate_summary);
+            }
+
+            // 2D & Table
+            initPackingCanvasListeners();
+            drawPackingCanvas();
+            renderPackingTable();
+        }
+
+        // ── Customer Filter & Isolate Implementation ──
+        let isCustomerIsolated = false;
+        let currentLoadingStep = 9999;
+        let loadingSequenceInterval = null;
+
+        function toggleCustomerIsolateMode() {
+            isCustomerIsolated = !isCustomerIsolated;
+            const btn = document.getElementById('btnToggleCustomerIsolate');
+            if (btn) {
+                if (isCustomerIsolated) {
+                    btn.innerHTML = '👁️ Hiện lại toàn bộ thùng xe';
+                    btn.style.background = '#f59e0b';
+                    btn.style.color = '#000';
+                    btn.style.fontWeight = '700';
+                } else {
+                    btn.innerHTML = '👁️ Chỉ hiện thùng của khách này';
+                    btn.style.background = 'rgba(251,191,36,0.2)';
+                    btn.style.color = '#fbbf24';
+                    btn.style.fontWeight = 'normal';
+                }
+            }
+            highlight3DMeshesByCustomer(selectedPackingCustomer);
+        }
+
+        function initLoadingSequenceSlider() {
+            if (!currentPackingPlan) return;
+            const items = currentPackingPlan.placed_items || [];
+            const total = items.length;
+            const slider = document.getElementById('packingStepSlider');
+            const badge = document.getElementById('packingStepBadge');
+            const desc = document.getElementById('packingCurrentStepDesc');
+            if (slider) {
+                slider.min = 1;
+                slider.max = Math.max(1, total);
+                slider.value = total;
+                currentLoadingStep = total;
+            }
+            if (badge) badge.textContent = `Tất cả (${total})`;
+            if (desc) desc.textContent = `Đang hiển thị toàn bộ ${total} kiện trên xe.`;
+        }
+
+        function onLoadingStepSliderChange(val) {
+            currentLoadingStep = parseInt(val, 10);
+            if (!currentPackingPlan) return;
+            const items = currentPackingPlan.placed_items || [];
+            const total = items.length;
+            const badge = document.getElementById('packingStepBadge');
+            const desc = document.getElementById('packingCurrentStepDesc');
+
+            if (currentLoadingStep >= total) {
+                if (badge) badge.textContent = `Tất cả (${total})`;
+                if (desc) desc.textContent = `Đang hiển thị toàn bộ ${total} kiện trên xe.`;
+            } else {
+                if (badge) badge.textContent = `Bước ${currentLoadingStep}/${total}`;
+                const currentItem = items.find(it => it.load_order === currentLoadingStep) || items[currentLoadingStep - 1];
+                if (desc && currentItem) {
+                    const truckD = packing3DTruckDims.depth || 300;
+                    const pos = currentItem.y < (truckD * 0.35) ? 'Sát Cabin' : (currentItem.y > (truckD * 0.7) ? 'Cửa sau' : 'Giữa xe');
+                    desc.innerHTML = `Đang xếp #${currentLoadingStep}: <strong>${escapeHtml(currentItem.item_name || currentItem.sku)}</strong> (${escapeHtml(currentItem.customer_name || 'Khách')}) ➔ ${pos}, Tầng ${currentItem.layer || 1}`;
+                }
+            }
+
+            highlight3DMeshesByCustomer(selectedPackingCustomer);
+        }
+
+        function stepLoadingSequence(delta) {
+            const slider = document.getElementById('packingStepSlider');
+            if (!slider) return;
+            let val = parseInt(slider.value, 10) + delta;
+            val = Math.max(1, Math.min(parseInt(slider.max, 10), val));
+            slider.value = val;
+            onLoadingStepSliderChange(val);
+        }
+
+        function toggleLoadingSequencePlay() {
+            const btn = document.getElementById('btnPlayLoadingSequence');
+            if (loadingSequenceInterval) {
+                clearInterval(loadingSequenceInterval);
+                loadingSequenceInterval = null;
+                if (btn) btn.innerHTML = '▶️ Diễn hoạt';
+            } else {
+                const slider = document.getElementById('packingStepSlider');
+                if (!slider) return;
+                const total = parseInt(slider.max, 10);
+                if (parseInt(slider.value, 10) >= total) {
+                    slider.value = 1;
+                    onLoadingStepSliderChange(1);
+                }
+                if (btn) btn.innerHTML = '⏸️ Dừng';
+                
+                let speedMultiplier = window.loadingSequenceSpeedMultiplier || 1;
+                let baseInterval = 750;
+                
+                loadingSequenceInterval = setInterval(() => {
+                    let cur = parseInt(slider.value, 10);
+                    if (cur >= total) {
+                        clearInterval(loadingSequenceInterval);
+                        loadingSequenceInterval = null;
+                        if (btn) btn.innerHTML = '▶️ Diễn hoạt';
+                    } else {
+                        slider.value = cur + 1;
+                        onLoadingStepSliderChange(cur + 1);
+                    }
+                }, baseInterval / speedMultiplier);
+            }
+        }
+
+        window.loadingSequenceSpeedMultiplier = 1;
+        function toggleLoadingSequenceSpeed() {
+            const btn = document.getElementById('btnSpeedLoadingSequence');
+            if (!btn) return;
+            
+            if (window.loadingSequenceSpeedMultiplier === 1) {
+                window.loadingSequenceSpeedMultiplier = 2;
+                btn.innerHTML = '⚡ 2x';
+            } else if (window.loadingSequenceSpeedMultiplier === 2) {
+                window.loadingSequenceSpeedMultiplier = 4;
+                btn.innerHTML = '⚡ 4x';
+            } else {
+                window.loadingSequenceSpeedMultiplier = 1;
+                btn.innerHTML = '⚡ 1x';
+            }
+            
+            // If already playing, restart with new speed
+            if (loadingSequenceInterval) {
+                toggleLoadingSequencePlay(); // stop
+                toggleLoadingSequencePlay(); // start with new speed
+            }
+        }
+
+        function populatePackingCustomerFilter() {
+            const select = document.getElementById('packingCustomerFilter');
+            if (!select || !currentPackingPlan) return;
+
+            const items = currentPackingPlan.placed_items || [];
+            const custMap = new Map();
+            items.forEach(it => {
+                const name = it.customer_name || 'Khách chung';
+                if (!custMap.has(name)) {
+                    custMap.set(name, { count: 0, weight: 0, orderCode: it.order_code || 'N/A', stop: it.stop_step });
+                }
+                const info = custMap.get(name);
+                info.count++;
+                info.weight += (it.weight_kg || 0);
+            });
+
+            let opts = `<option value="all">🌐 Toàn bộ thùng hàng (Tất cả ${custMap.size} khách)</option>`;
+            custMap.forEach((info, name) => {
+                const isSel = selectedPackingCustomer === name ? 'selected' : '';
+                opts += `<option value="${name}" ${isSel}>👤 ${name} (Trạm #${info.stop} • ${info.count} kiện • ${Math.round(info.weight)}kg)</option>`;
+            });
+            select.innerHTML = opts;
+        }
+
+        function onPackingCustomerFilterChange() {
+            const select = document.getElementById('packingCustomerFilter');
+            if (!select) return;
+            applyCustomerFilter(select.value);
+        }
+
+        function clearCustomerFilter() {
+            const select = document.getElementById('packingCustomerFilter');
+            if (select) select.value = 'all';
+            isCustomerIsolated = false;
+            const btn = document.getElementById('btnToggleCustomerIsolate');
+            if (btn) {
+                btn.innerHTML = '👁️ Chỉ hiện thùng của khách này';
+                btn.style.background = 'rgba(251,191,36,0.2)';
+                btn.style.color = '#fbbf24';
+                btn.style.fontWeight = 'normal';
+            }
+            applyCustomerFilter('all');
+        }
+
+        function applyCustomerFilter(customerName) {
+            selectedPackingCustomer = customerName;
+            const card = document.getElementById('packingCustomerDetailCard');
+
+            if (!currentPackingPlan) return;
+            const items = currentPackingPlan.placed_items || [];
+
+            if (customerName === 'all') {
+                if (card) card.classList.add('inactive');
+            } else {
+                if (card) card.classList.remove('inactive');
+                const custItems = items.filter(it => (it.customer_name || 'Khách chung') === customerName);
+                if (custItems.length > 0) {
+                    const first = custItems[0];
+                    const totalWt = custItems.reduce((acc, c) => acc + (c.weight_kg || 0), 0);
+                    const totalVol = custItems.reduce((acc, c) => acc + ((c.depth * c.width * c.height) / 1000000), 0);
+
+                    document.getElementById('custCardCustomerName').textContent = customerName;
+                    document.getElementById('custCardOrderCode').textContent = `(${first.order_code || 'N/A'})`;
+                    document.getElementById('custCardStopSeq').textContent = `Trạm #${first.stop_step}`;
+                    document.getElementById('custCardQuantity').textContent = `${custItems.length} kiện hàng`;
+                    document.getElementById('custCardWeight').textContent = `${Math.round(totalWt)} kg`;
+                    document.getElementById('custCardVolume').textContent = `Thể tích: ${totalVol.toFixed(2)} m³`;
+                    document.getElementById('custCardUnloadOrder').textContent = `Thứ tự dỡ hàng: #${first.unload_order}`;
+
+                    // Check LIFO status
+                    const blockedItems = custItems.filter(c => c.is_blocked);
+                    const lifoStatusEl = document.getElementById('custCardLifoStatus');
+                    if (blockedItems.length > 0) {
+                        const blockers = Array.from(new Set(blockedItems.flatMap(b => b.blocked_by || [])));
+                        lifoStatusEl.innerHTML = `<span style="color:var(--red);">⚠️ BỊ CẢN BỞI:</span> ${blockers.join(', ')}`;
+                    } else {
+                        lifoStatusEl.innerHTML = `<span style="color:var(--green);">✅ ĐƯỜNG DỠ THÔNG THOÁNG</span> (Không bị đơn sau cản)`;
+                    }
+
+                    // 3D coordinates summary
+                    const coordsText = custItems.map((c, idx) => 
+                        `• Kiện #${idx + 1}: <strong>(${c.x}, ${c.y}, ${c.z}) cm</strong> (Lớp ${c.layer || 1})`
+                    ).join('<br>');
+                    document.getElementById('custCardCoordsSummary').innerHTML = coordsText;
+
+                    // AI Verdict from debate summary
+                    const debateEval = currentPackingPlan.debate_summary?.customer_evaluations?.[customerName];
+                    const verdictText = debateEval?.ai_verdict || 
+                        `Hội đồng AI & Chuyên gia kho xác nhận kiện hàng của ${customerName} được xếp tối ưu: Các kiện nặng nằm dưới, đồ nhẹ/dễ vỡ được khóa cạnh chống lật, tuân thủ nghiêm ngặt nguyên tắc LIFO dỡ trước tại trạm #${first.stop_step}.`;
+                    document.getElementById('custCardVerdictText').textContent = verdictText;
+
+                    // Populate detailed table sorted from inside (Cabin) to outside (Door)
+                    const tbody = document.getElementById('custCardItemsTableBody');
+                    if (tbody) {
+                        const sortedCustItems = [...custItems].sort((a, b) => (a.load_order || 0) - (b.load_order || 0));
+                        let rowsHtml = '';
+                        const truckD = packing3DTruckDims.depth || 300;
+                        sortedCustItems.forEach((c, idx) => {
+                            let posTag = 'Khoang giữa xe';
+                            if (c.y < truckD * 0.35) posTag = 'Sát vách Cabin (Trong cùng)';
+                            else if (c.y > truckD * 0.70) posTag = 'Sát cửa sau (Dỡ trước)';
+
+                            let supportText = '✅ Tựa sàn đáy xe vững chãi';
+                            if (c.layer > 1) {
+                                if ((c.lateral_support_count || 0) >= 2) supportText = '✅ Khóa 2 cạnh chống lật xe rung';
+                                else if ((c.lateral_support_count || 0) === 1) supportText = '✅ Tựa vách / Kiện kề ổn định';
+                                else supportText = '🟡 Cần chèn lót góc';
+                            }
+
+                            let typeBadge = '<span style="color:#10b981;">🟢 Thường</span>';
+                            if (c.is_heavy) typeBadge = '<span style="color:#ef4444;font-weight:700;">🔴 Nặng</span>';
+                            else if (c.is_fragile) typeBadge = '<span style="color:#f59e0b;font-weight:700;">🟡 Dễ vỡ</span>';
+                            else if (c.requires_cold) typeBadge = '<span style="color:#3b82f6;font-weight:700;">🔵 Lạnh</span>';
+
+                            rowsHtml += `
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                                    <td style="padding:6px 8px;font-weight:700;color:#fbbf24;">#${c.load_order || (idx + 1)}</td>
+                                    <td style="padding:6px 8px;">${escapeHtml(c.item_name || c.sku)} ${typeBadge}</td>
+                                    <td style="padding:6px 8px;color:#93c5fd;">${posTag}</td>
+                                    <td style="padding:6px 8px;font-family:monospace;">(${c.x}, ${c.y}, ${c.z}) cm</td>
+                                    <td style="padding:6px 8px;"><span class="badge" style="background:#334155;color:#fff;">Tầng ${c.layer || 1}</span></td>
+                                    <td style="padding:6px 8px;font-size:0.7rem;">${supportText}</td>
+                                </tr>
+                            `;
+                        });
+                        tbody.innerHTML = rowsHtml;
+                    }
+                }
+            }
+
+            // Apply highlighting in 3D scene
+            highlight3DMeshesByCustomer(customerName);
+
+            // Redraw 2D and table
+            drawPackingCanvas();
+            renderPackingTable();
+        }
+
+        function highlight3DMeshesByCustomer(customerName) {
+            packing3DMeshes.forEach(entry => {
+                const it = entry.item;
+                const isMatch = customerName === 'all' || (it.customer_name || 'Khách chung') === customerName;
+                const isWithinStep = (currentLoadingStep >= (it.load_order || 1));
+
+                if (!isWithinStep) {
+                    entry.mesh.visible = false;
+                    if (entry.edgeLines) entry.edgeLines.visible = false;
+                    return;
+                }
+
+                if (customerName !== 'all' && isCustomerIsolated) {
+                    // Isolate Mode: Hide all other customers completely
+                    if (isMatch) {
+                        entry.mesh.visible = true;
+                        if (entry.edgeLines) entry.edgeLines.visible = true;
+                        entry.mesh.material.opacity = 1.0;
+                        entry.mesh.material.transparent = false;
+                        entry.mesh.material.color.setHex(0xfbbf24);
+                        entry.mesh.material.emissive.setHex(0xf59e0b);
+                        entry.mesh.material.emissiveIntensity = 0.55;
+                        if (entry.edgeLines) entry.edgeLines.material.color.setHex(0xffffff);
+                        if (entry.edgeLines) entry.edgeLines.material.opacity = 1.0;
+                    } else {
+                        entry.mesh.visible = false;
+                        if (entry.edgeLines) entry.edgeLines.visible = false;
+                    }
+                } else {
+                    // Normal / Ghost mode
+                    entry.mesh.visible = true;
+                    if (entry.edgeLines) entry.edgeLines.visible = true;
+
+                    if (customerName === 'all') {
+                        entry.mesh.material.opacity = 0.95;
+                        entry.mesh.material.transparent = false;
+                        entry.mesh.material.color.setHex(entry.origColor);
+                        entry.mesh.material.emissive.setHex(0x000000);
+                        entry.mesh.material.emissiveIntensity = 0;
+                        if (entry.edgeLines) entry.edgeLines.material.color.setHex(0xffffff);
+                        if (entry.edgeLines) entry.edgeLines.material.opacity = 0.6;
+                    } else if (isMatch) {
+                        // Selected customer: Glow golden/cyan
+                        entry.mesh.material.opacity = 1.0;
+                        entry.mesh.material.transparent = false;
+                        entry.mesh.material.color.setHex(0xfbbf24);
+                        entry.mesh.material.emissive.setHex(0xf59e0b);
+                        entry.mesh.material.emissiveIntensity = 0.55;
+                        if (entry.edgeLines) entry.edgeLines.material.color.setHex(0xffffff);
+                        if (entry.edgeLines) entry.edgeLines.material.opacity = 1.0;
+                    } else {
+                        // Other customers: Ghost fade out
+                        entry.mesh.material.opacity = 0.12;
+                        entry.mesh.material.transparent = true;
+                        entry.mesh.material.color.setHex(0x475569);
+                        entry.mesh.material.emissive.setHex(0x000000);
+                        entry.mesh.material.emissiveIntensity = 0;
+                        if (entry.edgeLines) entry.edgeLines.material.color.setHex(0x334155);
+                        if (entry.edgeLines) entry.edgeLines.material.opacity = 0.2;
+                    }
+                }
+            });
+        }
+
+        // ── Three.js 3D Engine Implementation ──
+        function init3DPackingScene() {
+            if (isPacking3DInitialized) return;
+            const container = document.getElementById('packing3DViewContainer');
+            const canvas = document.getElementById('packing3DCanvas');
+            if (!container || !canvas || typeof THREE === 'undefined') return;
+
+            const width = container.clientWidth || 860;
+            const height = container.clientHeight || 480;
+
+            // Scene
+            packing3DScene = new THREE.Scene();
+            packing3DScene.background = new THREE.Color(0x090b14);
+
+            // Camera
+            packing3DCamera = new THREE.PerspectiveCamera(42, width / height, 1, 6000);
+            packing3DCamera.position.set(380, 420, 520);
+
+            // Renderer
+            packing3DRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            packing3DRenderer.setSize(width, height);
+            packing3DRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            // Controls
+            if (typeof THREE.OrbitControls !== 'undefined') {
+                packing3DControls = new THREE.OrbitControls(packing3DCamera, canvas);
+                packing3DControls.enableDamping = true;
+                packing3DControls.dampingFactor = 0.08;
+                packing3DControls.maxPolarAngle = Math.PI / 2 + 0.15;
+                packing3DControls.target.set(0, 80, 0);
+                
+                // Mặc định vô hiệu hóa để không cản trở thao tác cuộn trang
+                packing3DControls.enabled = false;
+                
+                // Bật controls khi người dùng bắt đầu tương tác (bằng capture phase)
+                const enable3DControls = () => { packing3DControls.enabled = true; };
+                canvas.addEventListener('pointerdown', enable3DControls, true);
+                canvas.addEventListener('mousedown', enable3DControls, true);
+                canvas.addEventListener('touchstart', enable3DControls, true);
+
+                // Tắt controls khi người dùng click ra ngoài vùng 3D
+                const disable3DControls = (event) => {
+                    if (event.target !== canvas) packing3DControls.enabled = false;
+                };
+                document.addEventListener('pointerdown', disable3DControls);
+                document.addEventListener('mousedown', disable3DControls);
+                document.addEventListener('touchstart', disable3DControls);
+
+                packing3DControls.update();
+            }
+
+            // Lighting
+            const ambLight = new THREE.AmbientLight(0xffffff, 0.75);
+            packing3DScene.add(ambLight);
+
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.85);
+            dirLight1.position.set(600, 1000, 700);
+            packing3DScene.add(dirLight1);
+
+            const dirLight2 = new THREE.DirectionalLight(0x60a5fa, 0.45);
+            dirLight2.position.set(-600, 400, -700);
+            packing3DScene.add(dirLight2);
+
+            // Raycaster & Mouse for 3D picking
+            packing3DRaycaster = new THREE.Raycaster();
+            packing3DMouse = new THREE.Vector2();
+
+            canvas.addEventListener('mousemove', on3DCanvasMouseMove);
+            canvas.addEventListener('click', on3DCanvasClick);
+            window.addEventListener('resize', resizePacking3DRenderer);
+
+            // Animation Loop
+            function animate() {
+                packing3DAnimationId = requestAnimationFrame(animate);
+                if (packing3DControls) packing3DControls.update();
+                if (packing3DRenderer && packing3DScene && packing3DCamera) {
+                    packing3DRenderer.render(packing3DScene, packing3DCamera);
+                }
+            }
+            animate();
+
+            isPacking3DInitialized = true;
+        }
+
+        function resizePacking3DRenderer() {
+            const container = document.getElementById('packing3DViewContainer');
+            if (!container || !packing3DRenderer || !packing3DCamera) return;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            if (w > 0 && h > 0) {
+                packing3DCamera.aspect = w / h;
+                packing3DCamera.updateProjectionMatrix();
+                packing3DRenderer.setSize(w, h);
+            }
+        }
+
+        function render3DPackingPlan() {
+            if (!packing3DScene || !currentPackingPlan) return;
+
+            // Clear previous items
+            packing3DMeshes.forEach(entry => {
+                packing3DScene.remove(entry.mesh);
+                if (entry.edgeLines) packing3DScene.remove(entry.edgeLines);
+            });
+            packing3DMeshes = [];
+
+            // Remove previous truck container & helpers
+            const toRemove = [];
+            packing3DScene.children.forEach(child => {
+                if (child.userData && child.userData.isTruckObject) toRemove.push(child);
+            });
+            toRemove.forEach(c => packing3DScene.remove(c));
+
+            const W = packing3DTruckDims.width;
+            const D = packing3DTruckDims.depth;
+            const H = packing3DTruckDims.height;
+
+            // ── 1. Truck Container (Semi-transparent Glass Body with BackSide & DepthWrite False) ──
+            // CRITICAL FIX FOR DISAPPEARING BOXES: depthWrite: false ensures container walls never occlude interior boxes on rotation!
+            const truckGeom = new THREE.BoxGeometry(W, H, D);
+            const truckMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                transparent: true,
+                opacity: 0.10,
+                side: THREE.BackSide,
+                depthWrite: false
+            });
+            const truckMesh = new THREE.Mesh(truckGeom, truckMat);
+            truckMesh.position.set(0, H / 2, 0);
+            truckMesh.renderOrder = 0;
+            truckMesh.userData.isTruckObject = true;
+            packing3DScene.add(truckMesh);
+
+            // Frame Wireframe Lines
+            const truckEdges = new THREE.EdgesGeometry(truckGeom);
+            const truckLines = new THREE.LineSegments(truckEdges, new THREE.LineBasicMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.55,
+                depthWrite: false,
+                linewidth: 2
+            }));
+            truckLines.position.set(0, H / 2, 0);
+            truckLines.renderOrder = 1;
+            truckLines.userData.isTruckObject = true;
+            packing3DScene.add(truckLines);
+
+            // Floor Grid Helper
+            const grid = new THREE.GridHelper(Math.max(W, D) * 1.1, 20, 0x6366f1, 0x1e293b);
+            grid.position.set(0, 0, 0);
+            grid.userData.isTruckObject = true;
+            packing3DScene.add(grid);
+
+            // Cabin Signplate (-Z is Cabin)
+            const cabinGeom = new THREE.BoxGeometry(W * 0.9, 20, 24);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+            const cabinMesh = new THREE.Mesh(cabinGeom, cabinMat);
+            cabinMesh.position.set(0, 10, -D / 2 - 14);
+            cabinMesh.userData.isTruckObject = true;
+            packing3DScene.add(cabinMesh);
+
+            // Rear Door Frame (+Z is Rear Door)
+            const doorGeom = new THREE.BoxGeometry(W, H * 0.95, 8);
+            const doorEdges = new THREE.EdgesGeometry(doorGeom);
+            const doorLines = new THREE.LineSegments(doorEdges, new THREE.LineBasicMaterial({
+                color: 0x10b981,
+                linewidth: 3
+            }));
+            doorLines.position.set(0, H / 2, D / 2 + 4);
+            doorLines.userData.isTruckObject = true;
+            packing3DScene.add(doorLines);
+
+            // ── 2. Add Placed Cargo Items ──
+            const items = currentPackingPlan.placed_items || [];
+            items.forEach(it => {
+                const w = Math.max(5, it.width);
+                const d = Math.max(5, it.depth);
+                const h = Math.max(5, it.height);
+
+                // Coordinates Mapping:
+                // Three.js X = it.x + w/2 - W/2
+                // Three.js Y = it.z + h/2
+                // Three.js Z = it.y + d/2 - D/2
+                const cx = it.x + w / 2 - W / 2;
+                const cy = it.z + h / 2;
+                const cz = it.y + d / 2 - D / 2;
+
+                let hexColor = 0x10b981; // Green
+                if (it.is_heavy) hexColor = 0xef4444; // Red
+                else if (it.is_fragile) hexColor = 0xf59e0b; // Amber
+                else if (it.requires_cold) hexColor = 0x3b82f6; // Blue
+
+                const geom = new THREE.BoxGeometry(w, h, d);
+                // CRITICAL FIX: Opaque cargo boxes with depthWrite: true prevent any Z-fighting or camera rotation occlusion!
+                const mat = new THREE.MeshStandardMaterial({
+                    color: hexColor,
+                    roughness: 0.35,
+                    metalness: 0.15,
+                    transparent: false,
+                    depthWrite: true,
+                    depthTest: true
+                });
+
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.position.set(cx, cy, cz);
+                mesh.renderOrder = 10;
+                mesh.userData = { item: it, isCargoItem: true };
+                packing3DScene.add(mesh);
+
+                // Sharp Edge Outlines
+                const edgesGeom = new THREE.EdgesGeometry(geom);
+                const edgeLines = new THREE.LineSegments(edgesGeom, new THREE.LineBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.6,
+                    depthWrite: false,
+                    linewidth: 1.5
+                }));
+                edgeLines.position.set(cx, cy, cz);
+                edgeLines.renderOrder = 11;
+                packing3DScene.add(edgeLines);
+
+                packing3DMeshes.push({
+                    mesh: mesh,
+                    edgeLines: edgeLines,
+                    item: it,
+                    origColor: hexColor
+                });
+            });
+
+            // Set default isometric camera
+            setPacking3DCameraPreset('default');
+
+            // Apply any active customer filtering
+            if (selectedPackingCustomer !== 'all') {
+                highlight3DMeshesByCustomer(selectedPackingCustomer);
+            }
+        }
+
+        function setPacking3DCameraPreset(preset) {
+            if (!packing3DCamera || !packing3DControls) return;
+            const W = packing3DTruckDims.width;
+            const D = packing3DTruckDims.depth;
+            const H = packing3DTruckDims.height;
+
+            if (preset === 'default') {
+                packing3DCamera.position.set(W * 1.5, H * 2.2, D * 1.5);
+                packing3DControls.target.set(0, H * 0.4, 0);
+            } else if (preset === 'rear') {
+                // Look into rear door (LIFO unloading view)
+                packing3DCamera.position.set(0, H * 0.8, D * 1.7);
+                packing3DControls.target.set(0, H * 0.45, 0);
+            } else if (preset === 'top') {
+                // Top-down view
+                packing3DCamera.position.set(0, H * 3.4, 0.01);
+                packing3DControls.target.set(0, 0, 0);
+            } else if (preset === 'side') {
+                // Side view
+                packing3DCamera.position.set(W * 2.6, H * 0.8, 0);
+                packing3DControls.target.set(0, H * 0.4, 0);
+            }
+            packing3DControls.update();
+        }
+
+        function resetPacking3DControls() {
+            setPacking3DCameraPreset('default');
+        }
+
+        function on3DCanvasMouseMove(event) {
+            const canvas = document.getElementById('packing3DCanvas');
+            const tooltip = document.getElementById('packingTooltip');
+            if (!canvas || !packing3DRaycaster || !packing3DCamera || !currentPackingPlan) return;
+
+            const rect = canvas.getBoundingClientRect();
+            packing3DMouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            packing3DMouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            packing3DRaycaster.setFromCamera(packing3DMouse, packing3DCamera);
+            const cargoMeshes = packing3DMeshes.map(e => e.mesh);
+            const intersects = packing3DRaycaster.intersectObjects(cargoMeshes);
+
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object;
+                const it = hitMesh.userData.item;
+                activeHoveredPackingItem = it;
+                canvas.style.cursor = 'pointer';
+
+                // Show Tooltip
+                let flagsHtml = '';
+                if (it.is_heavy) flagsHtml += '<span style="color:#ef4444;font-weight:700;">🔴 Nặng (Đáy) </span>';
+                if (it.is_fragile) flagsHtml += '<span style="color:#f59e0b;font-weight:700;">🟡 Dễ vỡ </span>';
+                if (it.requires_cold) flagsHtml += '<span style="color:#3b82f6;font-weight:700;">🔵 Hàng lạnh </span>';
+                if (!flagsHtml) flagsHtml = '<span style="color:#10b981;">🟢 Hàng thông thường</span>';
+
+                let lifoHtml = it.is_blocked 
+                    ? `<span style="color:#f87171;font-weight:700;">⚠️ Bị cản bởi: ${(it.blocked_by || []).join(', ')}</span>`
+                    : `<span style="color:#34d399;font-weight:700;">✅ Thông thoáng (Dỡ thẳng cửa sau)</span>`;
+
+                tooltip.innerHTML = `
+                    <div style="font-weight:700;color:#fbbf24;margin-bottom:4px;border-bottom:1px solid var(--border);padding-bottom:3px;">
+                        📦 ${it.item_name || it.sku}
+                    </div>
+                    <div style="font-size:0.72rem;line-height:1.45;">
+                        <div>🛑 <strong>Trạm:</strong> ${it.stop_step} — <strong>${it.customer_name || 'Khách hàng'}</strong></div>
+                        <div>🏷️ <strong>Mã đơn:</strong> <span class="order-code-badge">${it.order_code || 'N/A'}</span></div>
+                        <div>⏱️ <strong>Thứ tự LIFO:</strong> Xếp #${it.load_order} ➔ <strong>Dỡ #${it.unload_order}</strong></div>
+                        <div>📍 <strong>Tọa độ 3D (X, Y, Z):</strong> (${it.x}, ${it.y}, ${it.z}) cm</div>
+                        <div>📐 <strong>Kích thước:</strong> ${it.depth}×${it.width}×${it.height} cm | <strong>TL:</strong> ${it.weight_kg} kg</div>
+                        <div>🚪 <strong>Đường dỡ hàng:</strong> ${lifoHtml}</div>
+                        <div style="margin-top:4px;">${flagsHtml}</div>
+                    </div>
+                `;
+
+                tooltip.style.left = `${Math.min(window.innerWidth - 300, event.clientX + 16)}px`;
+                tooltip.style.top = `${Math.min(window.innerHeight - 200, event.clientY + 16)}px`;
+                tooltip.style.display = 'block';
+
+                highlightTableRowInPackingList(it);
+            } else {
+                if (activeHoveredPackingItem) {
+                    activeHoveredPackingItem = null;
+                    canvas.style.cursor = 'grab';
+                    if (tooltip) tooltip.style.display = 'none';
+                    clearHighlightTableRowInPackingList();
+                }
+            }
+        }
+
+        function on3DCanvasClick(event) {
+            if (!packing3DRaycaster || !packing3DCamera) return;
+            const cargoMeshes = packing3DMeshes.map(e => e.mesh);
+            const intersects = packing3DRaycaster.intersectObjects(cargoMeshes);
+            if (intersects.length > 0) {
+                const hit = intersects[0].object.userData.item;
+                if (hit && hit.customer_name) {
+                    const select = document.getElementById('packingCustomerFilter');
+                    if (select) {
+                        select.value = hit.customer_name;
+                        applyCustomerFilter(hit.customer_name);
+                    }
+                }
+            }
+        }
+
+        // ── AI Debate Council UI & API ──
+        function renderDebateTranscript(summary) {
+            const stream = document.getElementById('packingDebateStream');
+            const scoreText = document.getElementById('debateConsensusScoreText');
+            const badgeScore = document.getElementById('badgeDebateScore');
+            if (!stream || !summary) return;
+
+            const score = summary.consensus_score || 95;
+            if (scoreText) scoreText.innerHTML = `${score}% ${score >= 90 ? '✅ ĐÃ ĐẠT CHUẨN' : '⚠️ CẦN TINH CHỈNH'}`;
+            if (badgeScore) badgeScore.textContent = `${score}%`;
+
+            const rounds = summary.rounds || [];
+            let html = '';
+
+            rounds.forEach(r => {
+                html += `
+                    <div style="font-size:0.75rem;color:var(--text-dim);font-weight:700;margin-top:6px;text-transform:uppercase;letter-spacing:1px;">
+                        📌 Vòng ${r.round_num}: ${r.round_num === 1 ? 'Khởi tạo & Phản biện' : 'Bảo vệ & Phê duyệt cuối'}
+                    </div>
+                `;
+
+                // Proposer card
+                if (r.proposer) {
+                    html += `
+                        <div class="debate-card proposer">
+                            <div class="debate-author" style="color:#60a5fa;">
+                                <span>🤖</span> AI Đề Xuất (Proposer Agent)
+                            </div>
+                            <div>${escapeHtml(r.proposer)}</div>
+                        </div>
+                    `;
+                }
+
+                // Opponent card
+                if (r.opponent) {
+                    html += `
+                        <div class="debate-card opponent">
+                            <div class="debate-author" style="color:#f87171;">
+                                <span>🕵️</span> AI Phản Biện (Opponent Agent)
+                            </div>
+                            <div>${escapeHtml(r.opponent)}</div>
+                        </div>
+                    `;
+                }
+
+                // Repair card
+                if (r.repair) {
+                    html += `
+                        <div class="debate-card repair">
+                            <div class="debate-author" style="color:#fbbf24;">
+                                <span>⚡</span> Thuật Toán Tự Sửa Lỗi (Auto-Repair Heuristic)
+                            </div>
+                            <div>${escapeHtml(r.repair)}</div>
+                        </div>
+                    `;
+                }
+            });
+
+            // Consensus card
+            html += `
+                <div class="debate-card consensus">
+                    <div class="debate-author" style="color:var(--green);">
+                        <span>🎯</span> Kết Luận Chung Cuộc
+                    </div>
+                    <div>Hội đồng AI thống nhất phương án xếp xe với độ đồng thuận <strong>${score}%</strong>. Kế hoạch dỡ hàng theo LIFO hoàn toàn thông suốt và tải trọng được cân bằng đối xứng.</div>
+                </div>
+            `;
+
+            stream.innerHTML = html;
+        }
+
+        async function triggerAIDebateManual() {
+            if (!currentPackingPlan) return;
+            const btn = document.getElementById('btnTriggerLiveDebate');
+            const origText = btn ? btn.innerHTML : '';
+            if (btn) btn.innerHTML = '<span>⏳</span> Đang tranh luận...';
+
+            try {
+                const day = currentB2BResult?.schedule?.[currentTripDayIdx];
+                const route = day?.routes?.[currentTripRouteIdx];
+                if (!route) return;
+
+                const resp = await fetch('/api/packing/debate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vehicle_id: route.vehicle_id || route.vehicle_name,
+                        stops: route.stops,
+                        total_load_kg: route.total_load_kg
+                    })
+                });
+                const res = await resp.json();
+                if (res.success && res.debate_result) {
+                    currentPackingPlan.debate_summary = res.debate_result;
+                    if (res.repaired_plan) {
+                        currentPackingPlan.placed_items = res.repaired_plan.placed_items;
+                    }
+                    renderDebateTranscript(res.debate_result);
+                    render3DPackingPlan();
+                    drawPackingCanvas();
+                    renderPackingTable();
+                    alert(`✅ 2 AI đã tranh luận xong! Độ đồng thuận: ${res.debate_result.consensus_score}%\nBiên bản đã lưu vào MySQL ai_debate_logs.`);
+                }
+            } catch (err) {
+                console.error('Debate failed:', err);
+                alert('Có lỗi khi chạy tranh luận AI: ' + err.message);
+            } finally {
+                if (btn) btn.innerHTML = origText;
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        }
+
+        // ── 2D Canvas Fallback ──
+        function initPackingCanvasListeners() {
+            if (isPackingCanvasListenersAttached) return;
+            const canvas = document.getElementById('packingCanvas');
+            const tooltip = document.getElementById('packingTooltip');
+            if (!canvas || !tooltip) return;
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!currentPackingPlan) return;
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mx = (e.clientX - rect.left) * scaleX;
+                const my = (e.clientY - rect.top) * scaleY;
+
+                const hit = packingRenderBoxes.slice().reverse().find(b =>
+                    mx >= b.x && mx <= (b.x + b.w) &&
+                    my >= b.y && my <= (b.y + b.h)
+                );
+
+                if (hit) {
+                    activeHoveredPackingItem = hit.item;
+                    canvas.style.cursor = 'pointer';
+                    drawPackingCanvas();
+                    highlightTableRowInPackingList(hit.item);
+                } else {
+                    if (activeHoveredPackingItem) {
+                        activeHoveredPackingItem = null;
+                        canvas.style.cursor = 'default';
+                        drawPackingCanvas();
+                        clearHighlightTableRowInPackingList();
+                    }
+                }
+            });
+
+            isPackingCanvasListenersAttached = true;
+        }
+
+        function drawPackingCanvas() {
+            const canvas = document.getElementById('packingCanvas');
+            if (!canvas || !currentPackingPlan) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const plan = currentPackingPlan;
+            const truckDepth = plan.truck_depth || 430;
+            const truckWidth = plan.truck_width || 190;
+
+            const padLeft = 95;
+            const padRight = 45;
+            const padTop = 26;
+            const padBottom = 26;
+
+            const availW = canvas.width - padLeft - padRight;
+            const availH = canvas.height - padTop - padBottom;
+            const scale = Math.min(availW / truckDepth, availH / truckWidth);
+
+            const boxW = truckDepth * scale;
+            const boxH = truckWidth * scale;
+            const boxX = padLeft + (availW - boxW) / 2;
+            const boxY = padTop + (availH - boxH) / 2;
+
+            // Cabin Body
+            const cabW = 68;
+            const cabH = boxH * 0.92;
+            const cabX = boxX - cabW - 4;
+            const cabY = boxY + (boxH - cabH) / 2;
+
+            ctx.fillStyle = '#1e2330';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cabX, cabY, cabW, cabH);
+            ctx.fillRect(cabX, cabY, cabW, cabH);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 9px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('CABIN', cabX + cabW / 2, cabY + cabH / 2 + 3);
+
+            // Container Bed
+            ctx.fillStyle = '#12141c';
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+            // Placed items
+            packingRenderBoxes = [];
+            const placedItems = plan.placed_items || [];
+            let itemsToDraw = placedItems;
+            if (currentPackingLayer === 1) itemsToDraw = placedItems.filter(i => i.layer === 1);
+            else if (currentPackingLayer === 2) itemsToDraw = placedItems.filter(i => i.layer === 2);
+
+            itemsToDraw.forEach(item => {
+                const ix = boxX + item.y * scale;
+                const iy = boxY + item.x * scale;
+                const iw = Math.max(4, item.depth * scale);
+                const ih = Math.max(4, item.width * scale);
+
+                packingRenderBoxes.push({ item, x: ix, y: iy, w: iw, h: ih });
+
+                let fillStyle = 'rgba(16, 185, 129, 0.85)';
+                let strokeStyle = '#34d399';
+                if (item.is_heavy) {
+                    fillStyle = 'rgba(239, 68, 68, 0.85)';
+                    strokeStyle = '#f87171';
+                } else if (item.is_fragile) {
+                    fillStyle = 'rgba(245, 158, 11, 0.85)';
+                    strokeStyle = '#fbbf24';
+                } else if (item.requires_cold) {
+                    fillStyle = 'rgba(59, 130, 246, 0.85)';
+                    strokeStyle = '#60a5fa';
+                }
+
+                // Highlight customer
+                const isCustMatch = selectedPackingCustomer === 'all' || (item.customer_name || 'Khách chung') === selectedPackingCustomer;
+                if (selectedPackingCustomer !== 'all') {
+                    if (isCustMatch) {
+                        fillStyle = '#fbbf24';
+                        strokeStyle = '#ffffff';
+                    } else {
+                        fillStyle = 'rgba(71, 85, 105, 0.15)';
+                        strokeStyle = '#334155';
+                    }
+                }
+
+                ctx.save();
+                ctx.fillStyle = fillStyle;
+                ctx.strokeStyle = strokeStyle;
+                ctx.fillRect(ix, iy, iw, ih);
+                ctx.strokeRect(ix, iy, iw, ih);
+
+                if (iw >= 28 && ih >= 16 && isCustMatch) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 8px Inter, sans-serif';
+                    ctx.fillText(`U#${item.unload_order}`, ix + iw / 2, iy + ih / 2);
+                }
+                ctx.restore();
+            });
+        }
+
+        // ── Smart Compact Warnings UI ──
+        let isPackingWarningsExpanded = false;
+
+        function updatePackingWarningsUI(warnings) {
+            const warnBox = document.getElementById('packingWarningsBox');
+            if (!warnBox) return;
+
+            if (!warnings || warnings.length === 0) {
+                warnBox.style.display = 'none';
+                return;
+            }
+
+            warnBox.style.display = 'block';
+
+            // Categorize warnings
+            const lifoWarnings = [];
+            const weightWarnings = [];
+            const spaceWarnings = [];
+            const otherWarnings = [];
+
+            warnings.forEach(w => {
+                const str = String(w);
+                if (str.includes('chặn dỡ') || str.includes('LIFO')) {
+                    lifoWarnings.push(str);
+                } else if (str.includes('Trọng tải') || str.includes('lệch') || str.includes('tải trọng')) {
+                    weightWarnings.push(str);
+                } else if (str.includes('không gian') || str.includes('thể tích')) {
+                    spaceWarnings.push(str);
+                } else {
+                    otherWarnings.push(str);
+                }
+            });
+
+            // Summary Chips
+            let chipsHtml = '';
+            if (lifoWarnings.length > 0) {
+                chipsHtml += `<span class="warning-chip warning-chip-danger">⚠️ ${lifoWarnings.length} kiện cản LIFO</span>`;
+            }
+            if (weightWarnings.length > 0) {
+                chipsHtml += `<span class="warning-chip warning-chip-warning">⚖️ ${weightWarnings.length} cảnh báo tải/cân bằng</span>`;
+            }
+            if (spaceWarnings.length > 0) {
+                chipsHtml += `<span class="warning-chip warning-chip-info">📦 ${spaceWarnings.length} vấn đề thể tích</span>`;
+            }
+            if (otherWarnings.length > 0 && chipsHtml === '') {
+                chipsHtml += `<span class="warning-chip warning-chip-warning">ℹ️ ${otherWarnings.length} lưu ý</span>`;
+            }
+
+            const chipsContainer = document.getElementById('warningsCategoryChips');
+            if (chipsContainer) chipsContainer.innerHTML = chipsHtml;
+
+            const titleText = document.getElementById('warningsTitleText');
+            if (titleText) titleText.textContent = `Lưu ý & Cảnh báo xếp xe (${warnings.length})`;
+
+            const countText = document.getElementById('warningsExpandBtnText');
+            if (countText) countText.textContent = `Chi tiết (${warnings.length})`;
+
+            // Render Detail List
+            const detailList = document.getElementById('warningsDetailsList');
+            if (detailList) {
+                detailList.innerHTML = warnings.map(w => {
+                    let icon = '⚠️';
+                    let badgeColor = '#f59e0b';
+                    if (w.includes('chặn dỡ') || w.includes('LIFO')) {
+                        icon = '🚫';
+                        badgeColor = '#ef4444';
+                    } else if (w.includes('lệch') || w.includes('Trọng tải')) {
+                        icon = '⚖️';
+                        badgeColor = '#f59e0b';
+                    } else if (w.includes('không gian') || w.includes('thể tích')) {
+                        icon = '📦';
+                        badgeColor = '#60a5fa';
+                    }
+                    return `<div class="warning-detail-item"><span style="color:${badgeColor};">${icon}</span> <span>${w}</span></div>`;
+                }).join('');
+            }
+
+            // If <= 2 warnings: show directly. If > 2 warnings: collapse by default to save space!
+            isPackingWarningsExpanded = (warnings.length <= 2);
+            applyPackingWarningsExpandState();
+        }
+
+        function togglePackingWarningsExpanded() {
+            isPackingWarningsExpanded = !isPackingWarningsExpanded;
+            applyPackingWarningsExpandState();
+        }
+
+        function applyPackingWarningsExpandState() {
+            const detailList = document.getElementById('warningsDetailsList');
+            const arrow = document.getElementById('warningsExpandBtnArrow');
+            if (detailList) {
+                detailList.style.display = isPackingWarningsExpanded ? 'flex' : 'none';
+            }
+            if (arrow) {
+                arrow.textContent = isPackingWarningsExpanded ? '▲' : '▼';
+            }
+        }
+
+        // ── Compact Packing Items Controller ──
+        let currentPackingItemsViewMode = 'groups'; // 'groups' (default) or 'table'
+        let currentPackingQuickFilter = 'all'; // 'all', 'heavy', 'fragile', 'cold', 'blocked'
+        let packingItemSearchQuery = '';
+        let collapsedStopCards = new Set();
+
+        function setPackingItemsViewMode(mode) {
+            currentPackingItemsViewMode = mode;
+            document.getElementById('btnPackingViewGroups')?.classList.toggle('active', mode === 'groups');
+            document.getElementById('btnPackingViewTable')?.classList.toggle('active', mode === 'table');
+            const groupCont = document.getElementById('packingStopsGroupContainer');
+            const tableCont = document.getElementById('packingFlatTableContainer');
+            const toggleControls = document.getElementById('packingGroupToggleControls');
+            if (groupCont) groupCont.style.display = (mode === 'groups') ? 'flex' : 'none';
+            if (tableCont) tableCont.style.display = (mode === 'table') ? 'block' : 'none';
+            if (toggleControls) toggleControls.style.display = (mode === 'groups') ? 'flex' : 'none';
+            renderPackingItems();
+        }
+
+        function setPackingQuickFilter(filter) {
+            currentPackingQuickFilter = filter;
+            ['all', 'heavy', 'fragile', 'cold', 'blocked'].forEach(f => {
+                document.getElementById(`qf_${f}`)?.classList.toggle('active', f === filter);
+            });
+            renderPackingItems();
+        }
+
+        function onPackingItemSearchChange(val) {
+            packingItemSearchQuery = (val || '').trim().toLowerCase();
+            const clearBtn = document.getElementById('btnClearPackingSearch');
+            if (clearBtn) clearBtn.style.display = packingItemSearchQuery ? 'inline-block' : 'none';
+            renderPackingItems();
+        }
+
+        function clearPackingItemSearch() {
+            packingItemSearchQuery = '';
+            const input = document.getElementById('packingItemSearchInput');
+            if (input) input.value = '';
+            const clearBtn = document.getElementById('btnClearPackingSearch');
+            if (clearBtn) clearBtn.style.display = 'none';
+            renderPackingItems();
+        }
+
+        function togglePackingStopCard(stopKey) {
+            if (collapsedStopCards.has(stopKey)) {
+                collapsedStopCards.delete(stopKey);
+            } else {
+                collapsedStopCards.add(stopKey);
+            }
+            const body = document.getElementById(`stop-body-${stopKey}`);
+            const arrow = document.getElementById(`stop-arrow-${stopKey}`);
+            const isCollapsed = collapsedStopCards.has(stopKey);
+            if (body) body.style.display = isCollapsed ? 'none' : 'block';
+            if (arrow) arrow.textContent = isCollapsed ? '▼' : '▲';
+        }
+
+        function toggleAllPackingGroups(expand) {
+            const groupContainer = document.getElementById('packingStopsGroupContainer');
+            if (!groupContainer) return;
+            const bodies = groupContainer.querySelectorAll('.stop-card-body');
+            const arrows = groupContainer.querySelectorAll('.stop-expand-icon');
+            bodies.forEach(b => b.style.display = expand ? 'block' : 'none');
+            arrows.forEach(a => a.textContent = expand ? '▲' : '▼');
+            if (expand) {
+                collapsedStopCards.clear();
+            } else {
+                groupContainer.querySelectorAll('.stop-card').forEach(c => {
+                    const k = c.getAttribute('data-stop-key');
+                    if (k) collapsedStopCards.add(k);
+                });
+            }
+        }
+
+        function getFilteredPackingItems() {
+            if (!currentPackingPlan) return { allCount: 0, items: [], counts: { all: 0, heavy: 0, fragile: 0, cold: 0, blocked: 0 } };
+
+            const items = currentPackingPlan.placed_items || [];
+            let pool = items;
+
+            // Filter by Layer
+            if (currentPackingLayer === 1) pool = pool.filter(i => i.layer === 1);
+            else if (currentPackingLayer === 2) pool = pool.filter(i => i.layer === 2);
+
+            // Filter by Customer
+            if (selectedPackingCustomer && selectedPackingCustomer !== 'all') {
+                pool = pool.filter(i => (i.customer_name || 'Khách chung') === selectedPackingCustomer);
+            }
+
+            // Quick Filter Counts on the pool
+            const counts = {
+                all: pool.length,
+                heavy: pool.filter(i => i.is_heavy).length,
+                fragile: pool.filter(i => i.is_fragile).length,
+                cold: pool.filter(i => i.requires_cold).length,
+                blocked: pool.filter(i => i.is_blocked).length
+            };
+
+            // Apply active quick filter
+            let filtered = pool;
+            if (currentPackingQuickFilter === 'heavy') filtered = filtered.filter(i => i.is_heavy);
+            else if (currentPackingQuickFilter === 'fragile') filtered = filtered.filter(i => i.is_fragile);
+            else if (currentPackingQuickFilter === 'cold') filtered = filtered.filter(i => i.requires_cold);
+            else if (currentPackingQuickFilter === 'blocked') filtered = filtered.filter(i => i.is_blocked);
+
+            // Apply search query
+            if (packingItemSearchQuery) {
+                filtered = filtered.filter(i => {
+                    const name = (i.item_name || '').toLowerCase();
+                    const sku = (i.sku || '').toLowerCase();
+                    const cust = (i.customer_name || '').toLowerCase();
+                    const order = (i.order_code || '').toLowerCase();
+                    return name.includes(packingItemSearchQuery) ||
+                           sku.includes(packingItemSearchQuery) ||
+                           cust.includes(packingItemSearchQuery) ||
+                           order.includes(packingItemSearchQuery);
+                });
+            }
+
+            return { allCount: pool.length, items: filtered, counts };
+        }
+
+        function renderPackingTable() {
+            renderPackingItems();
+        }
+
+        function renderPackingItems() {
+            if (!currentPackingPlan) return;
+            const { allCount, items, counts } = getFilteredPackingItems();
+
+            // Update Badge Counts
+            const badgeTotal = document.getElementById('packingTotalItemsBadge');
+            if (badgeTotal) badgeTotal.textContent = `${items.length}/${allCount} kiện`;
+
+            const qfAll = document.getElementById('qf_count_all');
+            const qfHeavy = document.getElementById('qf_count_heavy');
+            const qfFragile = document.getElementById('qf_count_fragile');
+            const qfCold = document.getElementById('qf_count_cold');
+            const qfBlocked = document.getElementById('qf_count_blocked');
+            if (qfAll) qfAll.textContent = counts.all;
+            if (qfHeavy) qfHeavy.textContent = counts.heavy;
+            if (qfFragile) qfFragile.textContent = counts.fragile;
+            if (qfCold) qfCold.textContent = counts.cold;
+            if (qfBlocked) qfBlocked.textContent = counts.blocked;
+
+            // Render both views
+            renderPackingStopsGroups(items);
+            renderPackingFlatTable(items);
+        }
+
+        function renderPackingStopsGroups(items) {
+            const container = document.getElementById('packingStopsGroupContainer');
+            if (!container) return;
+
+            if (!items.length) {
+                container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-dim);font-size:0.8rem;background:var(--surface);border-radius:8px;">Không tìm thấy kiện hàng nào phù hợp với bộ lọc.</div>';
+                return;
+            }
+
+            // Group items by Stop
+            const stopsMap = new Map();
+            items.forEach(it => {
+                const stopKey = it.stop_step !== undefined ? `stop_${it.stop_step}` : (it.customer_name || 'stop_common');
+                if (!stopsMap.has(stopKey)) {
+                    stopsMap.set(stopKey, {
+                        key: stopKey,
+                        stopStep: it.stop_step !== undefined ? it.stop_step : 1,
+                        customerName: it.customer_name || 'Khách hàng',
+                        orderCode: it.order_code || '',
+                        items: [],
+                        totalWeight: 0,
+                        blockedCount: 0
+                    });
+                }
+                const g = stopsMap.get(stopKey);
+                g.items.push(it);
+                g.totalWeight += (it.weight_kg || 0);
+                if (it.is_blocked) g.blockedCount++;
+            });
+
+            // Render stop cards
+            container.innerHTML = Array.from(stopsMap.values()).map(g => {
+                const isCollapsed = collapsedStopCards.has(g.key);
+                let lifoStatusHtml = `<span class="badge" style="background:rgba(52,211,153,0.15);color:var(--green);font-size:0.68rem;padding:2px 7px;">✅ LIFO chuẩn (${g.items.length}/${g.items.length})</span>`;
+                if (g.blockedCount > 0) {
+                    lifoStatusHtml = `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;font-size:0.68rem;padding:2px 7px;">⚠️ ${g.blockedCount} kiện cản trở LIFO</span>`;
+                }
+
+                const rowsHtml = g.items.map(it => renderPackingItemRowHtml(it)).join('');
+
+                return `
+                    <div class="stop-card" data-stop-key="${g.key}">
+                        <div class="stop-card-header" onclick="togglePackingStopCard('${g.key}')">
+                            <div class="stop-card-title">
+                                <span class="order-code-badge" style="background:var(--accent);color:#ffffff;font-size:0.72rem;padding:2px 8px;font-weight:700;">Trạm #${g.stopStep}</span>
+                                <strong style="color:#fff;font-size:0.82rem;">${g.customerName}</strong>
+                                ${g.orderCode ? `<span style="font-size:0.7rem;color:var(--text-dim);">(${g.orderCode})</span>` : ''}
+                            </div>
+                            <div class="stop-card-metrics">
+                                <span style="font-size:0.72rem;color:var(--text-dim);">📦 <strong style="color:var(--text);">${g.items.length}</strong> kiện • ⚖️ <strong style="color:#fbbf24;">${Math.round(g.totalWeight)}</strong> kg</span>
+                                ${lifoStatusHtml}
+                                <span class="stop-expand-icon" id="stop-arrow-${g.key}">${isCollapsed ? '▼' : '▲'}</span>
+                            </div>
+                        </div>
+                        <div class="stop-card-body" id="stop-body-${g.key}" style="display:${isCollapsed ? 'none' : 'block'};">
+                            <table class="b2b-table compact-packing-table" style="margin:0;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:75px;"># Bốc/Dỡ</th>
+                                        <th>Kiện Hàng / SKU</th>
+                                        <th style="width:130px;">Quy cách (D×R×C)</th>
+                                        <th style="width:85px;">Trọng lượng</th>
+                                        <th style="width:115px;">Tọa độ 3D</th>
+                                        <th style="width:130px;">Trạng thái dỡ</th>
+                                        <th style="width:110px;">Phân loại</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rowsHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderPackingFlatTable(items) {
+            const tbody = document.getElementById('packingItemsTableBody');
+            if (!tbody) return;
+
+            if (!items.length) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-dim);">Không có kiện hàng nào phù hợp với bộ lọc.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map(it => renderPackingItemRowHtml(it, true)).join('');
+        }
+
+        function renderPackingItemRowHtml(it, showCustomer = false) {
+            let badgeClass = 'background:rgba(52,211,153,0.15);color:var(--green);';
+            let flagDesc = 'Bình thường';
+            if (it.is_heavy) {
+                badgeClass = 'background:rgba(239,68,68,0.2);color:#f87171;';
+                flagDesc = '🔴 Nặng (đáy)';
+            } else if (it.is_fragile) {
+                badgeClass = 'background:rgba(245,158,11,0.2);color:#fbbf24;';
+                flagDesc = '🟡 Dễ vỡ';
+            } else if (it.requires_cold) {
+                badgeClass = 'background:rgba(59,130,246,0.2);color:#60a5fa;';
+                flagDesc = '🔵 Hàng lạnh';
+            }
+
+            let lifoBadge = `<span class="badge" style="background:rgba(52,211,153,0.15);color:var(--green);font-size:0.68rem;padding:2px 6px;">✅ Thông thoáng</span>`;
+            if (it.is_blocked) {
+                const blockedWho = (it.blocked_by || []).slice(0, 2).join(', ');
+                lifoBadge = `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;font-size:0.68rem;padding:2px 6px;" title="Bị chặn bởi: ${(it.blocked_by || []).join(', ')}">⚠️ Chặn bởi: ${blockedWho || 'Hàng sau'}</span>`;
+            }
+
+            const isSelected = activeHoveredPackingItem && activeHoveredPackingItem.item_id === it.item_id;
+
+            return `
+                <tr id="packing-row-${it.item_id}" class="packing-item-row clickable-row ${isSelected ? 'selected-row' : ''}"
+                    onmouseenter="hoverPackingItemFromTable('${it.item_id}')"
+                    onmouseleave="unhoverPackingItemFromTable()"
+                    onclick="focusPackingItemFromTable('${it.item_id}')">
+                    <td>
+                        <span style="font-weight:700;color:var(--accent-light);">X#${it.load_order}</span>
+                        <span style="color:var(--text-dim);font-size:0.7rem;">➔</span>
+                        <span style="font-weight:700;color:var(--green);">D#${it.unload_order}</span>
+                    </td>
+                    ${showCustomer ? `<td><strong>${it.customer_name || 'Khách'}</strong> <span style="font-size:0.68rem;color:var(--text-dim);">(Trạm #${it.stop_step})</span></td>` : ''}
+                    <td><strong>${it.item_name || it.sku}</strong></td>
+                    <td>${it.depth}×${it.width}×${it.height} cm</td>
+                    <td><strong style="color:#fbbf24;">${it.weight_kg} kg</strong></td>
+                    <td style="color:var(--text-dim);font-size:0.7rem;">(${it.x}, ${it.y}, ${it.z})</td>
+                    <td>${lifoBadge}</td>
+                    <td><span class="badge" style="${badgeClass}padding:2px 6px;font-size:0.7rem;">${flagDesc}</span></td>
+                </tr>
+            `;
+        }
+
+        function hoverPackingItemFromTable(itemId) {
+            if (!currentPackingPlan) return;
+            const it = (currentPackingPlan.placed_items || []).find(i => i.item_id === itemId);
+            if (it) {
+                activeHoveredPackingItem = it;
+                drawPackingCanvas();
+                highlightTableRowInPackingList(it);
+            }
+        }
+
+        function unhoverPackingItemFromTable() {
+            activeHoveredPackingItem = null;
+            drawPackingCanvas();
+            clearHighlightTableRowInPackingList();
+        }
+
+        function focusPackingItemFromTable(itemId) {
+            hoverPackingItemFromTable(itemId);
+        }
+
+        function highlightTableRowInPackingList(item) {
+            document.querySelectorAll('.packing-item-row').forEach(r => r.classList.remove('selected-row'));
+            const row = document.getElementById(`packing-row-${item.item_id}`);
+            if (row) {
+                const parentCard = row.closest('.stop-card');
+                if (parentCard) {
+                    const stopKey = parentCard.getAttribute('data-stop-key');
+                    const body = document.getElementById(`stop-body-${stopKey}`);
+                    const arrow = document.getElementById(`stop-arrow-${stopKey}`);
+                    if (body && body.style.display === 'none') {
+                        body.style.display = 'block';
+                        if (arrow) arrow.textContent = '▲';
+                        collapsedStopCards.delete(stopKey);
+                    }
+                }
+                row.classList.add('selected-row');
+                row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function clearHighlightTableRowInPackingList() {
+            document.querySelectorAll('.packing-item-row').forEach(r => r.classList.remove('selected-row'));
         }
 
         // ── Chatbot Functions ──

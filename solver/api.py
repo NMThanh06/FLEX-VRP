@@ -29,6 +29,7 @@ import uvicorn
 
 # Thêm thư mục cha vào path để import modules
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from vrp_engine import (
     Location, RoadSegment, TrafficLight,
     load_traffic_data, _get_sample_traffic_data,
@@ -44,7 +45,12 @@ from db import (
     get_all_ai_corrections,
     get_orders, save_order, save_customer, get_customers, get_optimization_run,
     get_order_detail, update_order, delete_order, update_customer, replace_order_items, get_products,
+    save_vehicle_cargo_specs, get_vehicle_cargo_spec, get_all_vehicle_cargo_specs,
+    save_cargo_dimensions, get_cargo_dimensions, get_or_estimate_cargo_dimensions,
+    save_loading_plan, get_loading_plan, save_ai_debate_log, get_ai_debate_logs,
 )
+from bin_packing import BinPacker2D, BinPacker3D, CargoItem, VehicleCargo
+from ai_debate import ai_debate_council
 from ai_learner import (
     AILearner, EventsAnalyzer, lookup_vehicle_specs,
     suggest_alternative_routes,
@@ -1230,6 +1236,7 @@ async def api_b2b_update_order(order_id: int, request: Request):
         delivery_date_preferred=body.get("delivery_date_preferred") or body.get("order_date"),
         source=body.get("source", existing.get("source") or "manual"),
         notes=body.get("notes", existing.get("notes") or ""),
+        is_urgent=int(body.get("is_urgent", existing.get("is_urgent", 0)))
     )
     if isinstance(body.get("items"), list):
         replace_order_items(order_id, body["items"])
@@ -1261,6 +1268,7 @@ async def api_b2b_save_order(request: Request):
         customer_id=cust_id,
         order_code=body.get("order_code"),
         status=body.get("status", "confirmed"),
+        is_urgent=int(body.get("is_urgent", 0)),
         total_quantity=int(body.get("total_quantity", 50)),
         total_weight_kg=float(body.get("total_weight_kg", 250)),
         time_window_start=body.get("time_window_start", "08:00"),
@@ -1270,7 +1278,39 @@ async def api_b2b_save_order(request: Request):
         notes=body.get("notes", ""),
         source=body.get("source", "manual")
     )
-    return {"success": True, "order": order}
+    if isinstance(body.get("items"), list) and body["items"]:
+        replace_order_items(order["id"], body["items"])
+    elif body.get("item_name"):
+        replace_order_items(order["id"], [{
+            "product_name": body.get("item_name"),
+            "quantity": int(body.get("total_quantity", 50)),
+            "weight_per_unit_kg": round(float(body.get("total_weight_kg", 250)) / max(1, int(body.get("total_quantity", 50))), 1),
+            "width_cm": float(body.get("width_cm", 35)),
+            "depth_cm": float(body.get("depth_cm", 40)),
+            "height_cm": float(body.get("height_cm", 25)),
+            "is_heavy": int(body.get("is_heavy", 0)),
+            "is_fragile": int(body.get("is_fragile", 0)),
+            "requires_cold": int(body.get("requires_cold", 0))
+        }])
+
+    # Logic xử lý đơn gấp và hàng đợi 50 đơn
+    run_id = None
+    is_urgent = int(body.get("is_urgent", 0))
+    if is_urgent == 1:
+        # Nếu là đơn gấp, kích hoạt tối ưu ngay
+        run_id = start_async_pipeline(planning_days=1)
+    else:
+        # Kiểm tra số lượng đơn chờ không gấp
+        pending_orders = get_orders(status="pending")
+        non_urgent_pending = [o for o in pending_orders if o.get("is_urgent", 0) == 0]
+        if len(non_urgent_pending) >= 50:
+            run_id = start_async_pipeline(planning_days=5)
+
+    res = {"success": True, "order": order}
+    if run_id:
+        res["run_id"] = run_id
+        res["message"] = "Đã kích hoạt quá trình tối ưu tự động."
+    return res
 
 
 @app.post("/api/b2b/seed")
@@ -1289,7 +1329,10 @@ async def api_b2b_optimize(request: Request):
     except Exception:
         pass
     days = int(body.get("planning_days", 5))
-    run_id = start_async_pipeline(planning_days=days)
+    limit = body.get("order_limit")
+    if limit is not None:
+        limit = int(limit)
+    run_id = start_async_pipeline(planning_days=days, order_limit=limit)
     return {"success": True, "run_id": run_id}
 
 
@@ -1337,7 +1380,331 @@ async def api_chat_upload(request: Request):
         return JSONResponse({"error": "Chưa chọn file để tải lên"}, status_code=400)
     contents = await file_obj.read()
     res = process_uploaded_file(contents, file_obj.filename)
-    return res
+# ═══════════════════════════════════════
+# PHASE 2: BIN PACKING 2D API ENDPOINTS
+# ═══════════════════════════════════════
+
+@app.get("/api/packing/specs")
+async def api_packing_get_specs():
+    """Lấy danh sách thông số kích thước thùng xe của toàn bộ đội xe."""
+    specs = get_all_vehicle_cargo_specs()
+    return {"success": True, "specs": specs}
+
+
+@app.put("/api/packing/specs/{vehicle_id}")
+async def api_packing_update_specs(vehicle_id: int, request: Request):
+    """Cập nhật kích thước thùng xe (chiều rộng, dài, cao, cửa, số lớp)."""
+    body = await request.json()
+    w = float(body.get("cargo_width_cm") or 190.0)
+    d = float(body.get("cargo_depth_cm") or 430.0)
+    h = float(body.get("cargo_height_cm") or 185.0)
+    door = body.get("door_position", "rear")
+    layers = int(body.get("max_layers", 2))
+    notes = body.get("notes", "")
+    save_vehicle_cargo_specs(vehicle_id, w, d, h, door, layers, notes)
+    spec = get_vehicle_cargo_spec(vehicle_id)
+    return {"success": True, "spec": spec}
+
+
+@app.post("/api/packing/dimensions/estimate")
+async def api_packing_estimate_dimensions(request: Request):
+    """Ước lượng kích thước và đặc tính kiện hàng từ tên sản phẩm, cân nặng, thể tích bằng AI."""
+    body = await request.json()
+    name = str(body.get("item_name") or body.get("name") or body.get("product_name") or "Hàng hóa").strip()
+    wt = float(body.get("weight_kg") or 1.0)
+    vol = float(body.get("volume_cbm") or 0.01)
+    
+    try:
+        from chatbot import call_gemini
+        import json
+        prompt = f"""
+Bạn là chuyên gia logistics. Hãy ước lượng kích thước 3 chiều (width_cm, depth_cm, height_cm) và 
+đặc tính (is_fragile, is_heavy, requires_cold) cho loại hàng hóa sau:
+Tên: {name}
+Trọng lượng: {wt} kg
+Thể tích (tùy chọn): {vol} CBM
+
+Lưu ý:
+- Trọng lượng >= 8kg thường là hàng nặng (is_heavy=1)
+- Các mặt hàng đông lạnh, sữa, kem cần lạnh (requires_cold=1)
+- Các mặt hàng thủy tinh, gốm sứ dễ vỡ (is_fragile=1)
+
+Chỉ trả về ĐÚNG JSON với format sau, không kèm bất kỳ giải thích nào:
+{{
+  "width_cm": 35.0,
+  "depth_cm": 40.0,
+  "height_cm": 25.0,
+  "is_fragile": 0,
+  "is_heavy": 0,
+  "requires_cold": 0
+}}
+"""
+        res_text = call_gemini(prompt)
+        if "```json" in res_text:
+            res_text = res_text.split("```json")[1].split("```")[0]
+        elif "```" in res_text:
+            res_text = res_text.split("```")[1].split("```")[0]
+            
+        ai_data = json.loads(res_text.strip())
+        dims = {
+            "item_identifier": name,
+            "width_cm": float(ai_data.get("width_cm", 35.0)),
+            "depth_cm": float(ai_data.get("depth_cm", 40.0)),
+            "height_cm": float(ai_data.get("height_cm", 25.0)),
+            "weight_kg": wt,
+            "is_fragile": int(ai_data.get("is_fragile", 0)),
+            "is_heavy": int(ai_data.get("is_heavy", 0)),
+            "requires_cold": int(ai_data.get("requires_cold", 0))
+        }
+    except Exception as e:
+        print("AI estimation error:", e)
+        # Fallback to heuristics
+        dims = get_or_estimate_cargo_dimensions(name, wt, vol)
+        
+    return {"success": True, "dimensions": dims}
+
+
+@app.post("/api/packing/compute")
+async def api_packing_compute(request: Request):
+    """
+    Tính toán sơ đồ xếp hàng 2D cho một chuyến xe.
+    Nhận payload:
+      - Cách 1: { run_id: "...", day_idx: 0, route_idx: 0 }
+      - Cách 2: { vehicle: {...}, items: [...] }
+      - Cách 3: { vehicle_id: ..., stops: [...], total_load_kg: ... }
+    """
+    body = await request.json()
+
+    # Cách 1: Truy xuất từ kết quả optimization_run
+    if "run_id" in body:
+        run_id = body["run_id"]
+        day_idx = int(body.get("day_idx", 0))
+        route_idx = int(body.get("route_idx", 0))
+
+        run_info = get_optimization_run(run_id)
+        if not run_info or not run_info.get("result_json"):
+            return JSONResponse({"error": "Không tìm thấy kết quả tối ưu"}, status_code=404)
+
+        try:
+            res_json = json.loads(run_info["result_json"])
+            schedule = res_json.get("schedule", [])
+            if day_idx < len(schedule):
+                day = schedule[day_idx]
+                routes = day.get("routes", [])
+                if route_idx < len(routes):
+                    rt = routes[route_idx]
+                    if "packing_plan" in rt:
+                        return {"success": True, "packing_plan": rt["packing_plan"]}
+        except Exception as e:
+            return JSONResponse({"error": f"Lỗi đọc dữ liệu: {str(e)}"}, status_code=500)
+
+    # Cách 3: Tính toán trực tiếp từ stops & vehicle_id
+    if "stops" in body:
+        vid = body.get("vehicle_id") or 1
+        # Chuyển đổi tên xe nếu truyền chuỗi
+        spec = None
+        if isinstance(vid, int) or (isinstance(vid, str) and vid.isdigit()):
+            spec = get_vehicle_cargo_spec(int(vid))
+        if not spec:
+            all_specs = get_all_vehicle_cargo_specs()
+            for s in all_specs:
+                if str(vid).lower() in str(s.get("vehicle_name", "")).lower():
+                    spec = s
+                    break
+            if not spec and all_specs:
+                spec = all_specs[0]
+        if not spec:
+            spec = {"cargo_width_cm": 190.0, "cargo_depth_cm": 430.0, "cargo_height_cm": 185.0, "max_weight_kg": 2500.0}
+
+        vehicle_cargo = VehicleCargo(
+            vehicle_id=int(spec.get("vehicle_id") or 1),
+            vehicle_name=str(spec.get("vehicle_name") or "Xe tải"),
+            cargo_width_cm=float(spec.get("cargo_width_cm") or 190.0),
+            cargo_depth_cm=float(spec.get("cargo_depth_cm") or 430.0),
+            cargo_height_cm=float(spec.get("cargo_height_cm") or 185.0),
+            max_weight_kg=float(spec.get("max_weight_kg") or 2500.0),
+            door_position=str(spec.get("door_position") or "rear"),
+            max_layers=int(spec.get("max_layers") or 2)
+        )
+
+        cargo_items = []
+        item_counter = 1
+        for stop in body.get("stops", []):
+            st_type = stop.get("type", "customer")
+            if st_type == "depot":
+                continue
+            step = int(stop.get("step") or 1)
+            order_code = str(stop.get("order_code") or "")
+            cust_name = str(stop.get("name") or stop.get("customer_name") or "")
+            qty = int(stop.get("quantity") or 1)
+            total_wt = float(stop.get("weight_kg") or 20.0)
+            wt_per_unit = max(0.5, total_wt / max(1, qty))
+
+            dims = get_or_estimate_cargo_dimensions(cust_name or order_code, wt_per_unit, 0.01)
+
+            pack_count = min(qty, 20)
+            adj_wt = total_wt / max(1, pack_count)
+            for k in range(pack_count):
+                cargo_items.append(CargoItem(
+                    item_id=f"ITEM_{item_counter:03d}",
+                    name=f"Kiện {item_counter} ({order_code or cust_name[:12]})",
+                    width_cm=dims.get("width_cm", 35.0),
+                    depth_cm=dims.get("depth_cm", 40.0),
+                    height_cm=dims.get("height_cm", 25.0),
+                    weight_kg=round(adj_wt, 1),
+                    is_fragile=bool(dims.get("is_fragile", 0)),
+                    is_heavy=bool(dims.get("is_heavy", 0)),
+                    requires_cold=bool(dims.get("requires_cold", 0)),
+                    delivery_order=step,
+                    order_code=order_code,
+                    customer_name=cust_name,
+                    quantity_index=k + 1
+                ))
+                item_counter += 1
+
+        packer = BinPacker3D()
+        packing_result = packer.pack(cargo_items, vehicle_cargo)
+        
+        # Chạy Hội Đồng 2 AI Tranh Biện (Proposer vs Opponent)
+        route_label = f"ROUTE_{vid}_{len(body.get('stops', []))}"
+        debate_summary = ai_debate_council.debate_loading_plan(packing_result, vehicle_cargo, route_id=route_label)
+        
+        packing_dict = packing_result.to_dict()
+        packing_dict["debate_summary"] = debate_summary.to_dict()
+        packing_dict["debate_verified"] = debate_summary.consensus_reached
+
+        # Tự động lưu trữ vào MySQL loading_plans
+        try:
+            save_loading_plan(
+                route_id=route_label,
+                vehicle_id=vehicle_cargo.vehicle_id,
+                truck_width=vehicle_cargo.cargo_width_cm,
+                truck_depth=vehicle_cargo.cargo_depth_cm,
+                truck_height=vehicle_cargo.cargo_height_cm,
+                placed_items=packing_dict.get("placed_items", []),
+                unplaced_items=packing_dict.get("unplaced_items", []),
+                total_weight=packing_result.total_packed_weight_kg,
+                space_util=packing_result.space_utilization_pct,
+                balance_ratio=packing_result.balance_ratio,
+                warnings=packing_result.warnings,
+                debate_score=debate_summary.consensus_score,
+                debate_verified=1 if debate_summary.consensus_reached else 0
+            )
+        except Exception as e:
+            print(f"[API] Error saving plan to MySQL: {e}")
+
+        return {
+            "success": True,
+            "packing_plan": packing_dict,
+            "debate_summary": debate_summary.to_dict()
+        }
+
+    # Cách 2: Tính toán từ custom vehicle & items
+    v_data = body.get("vehicle", {})
+    items_data = body.get("items", [])
+
+    if not v_data and not items_data:
+        return JSONResponse({"error": "Thiếu dữ liệu vehicle hoặc items"}, status_code=400)
+
+    vehicle_cargo = VehicleCargo(
+        vehicle_id=int(v_data.get("vehicle_id") or 1),
+        vehicle_name=str(v_data.get("vehicle_name") or "Xe tải"),
+        cargo_width_cm=float(v_data.get("cargo_width_cm") or 190.0),
+        cargo_depth_cm=float(v_data.get("cargo_depth_cm") or 430.0),
+        cargo_height_cm=float(v_data.get("cargo_height_cm") or 185.0),
+        max_weight_kg=float(v_data.get("max_weight_kg") or 2500.0),
+        door_position=str(v_data.get("door_position") or "rear"),
+        max_layers=int(v_data.get("max_layers") or 3)
+    )
+
+    cargo_items = []
+    for idx, it in enumerate(items_data, 1):
+        cargo_items.append(CargoItem(
+            item_id=str(it.get("item_id") or f"ITM_{idx:03d}"),
+            name=str(it.get("name") or f"Kiện hàng {idx}"),
+            width_cm=float(it.get("width_cm") or 35.0),
+            depth_cm=float(it.get("depth_cm") or 40.0),
+            height_cm=float(it.get("height_cm") or 25.0),
+            weight_kg=float(it.get("weight_kg") or 5.0),
+            is_fragile=bool(it.get("is_fragile")),
+            is_heavy=bool(it.get("is_heavy")),
+            requires_cold=bool(it.get("requires_cold")),
+            delivery_order=int(it.get("delivery_order") or 1),
+            order_code=str(it.get("order_code") or ""),
+            customer_name=str(it.get("customer_name") or ""),
+            eta=str(it.get("eta") or "")
+        ))
+
+    packer = BinPacker3D()
+    packing_result = packer.pack(cargo_items, vehicle_cargo)
+    debate_summary = ai_debate_council.debate_loading_plan(packing_result, vehicle_cargo, route_id="CUSTOM_ROUTE")
+    packing_dict = packing_result.to_dict()
+    packing_dict["debate_summary"] = debate_summary.to_dict()
+    packing_dict["debate_verified"] = debate_summary.consensus_reached
+
+    return {
+        "success": True,
+        "packing_plan": packing_dict,
+        "debate_summary": debate_summary.to_dict()
+    }
+
+
+@app.post("/api/packing/debate")
+async def api_packing_debate(request: Request):
+    """
+    Endpoint Hội Đồng 2 AI Tranh Biện (Proposer vs Opponent):
+    Chạy phản biện đa vòng, soi lỗi theo từng khách và lưu trữ vào MySQL.
+    """
+    body = await request.json()
+    route_id = str(body.get("route_id") or "ROUTE_DEBATE")
+    vid = body.get("vehicle_id") or 1
+    spec = get_vehicle_cargo_spec(int(vid) if str(vid).isdigit() else 1)
+    
+    vehicle_cargo = VehicleCargo(
+        vehicle_id=int(spec.get("vehicle_id") or 1),
+        vehicle_name=str(spec.get("vehicle_name") or "Xe tải"),
+        cargo_width_cm=float(spec.get("cargo_width_cm") or 190.0),
+        cargo_depth_cm=float(spec.get("cargo_depth_cm") or 430.0),
+        cargo_height_cm=float(spec.get("cargo_height_cm") or 185.0),
+        max_weight_kg=float(spec.get("max_weight_kg") or 2500.0),
+        door_position=str(spec.get("door_position") or "rear"),
+        max_layers=int(spec.get("max_layers") or 3)
+    )
+
+    cargo_items = []
+    for idx, it in enumerate(body.get("items", []), 1):
+        cargo_items.append(CargoItem(
+            item_id=str(it.get("item_id") or f"ITM_{idx:03d}"),
+            name=str(it.get("name") or f"Kiện {idx}"),
+            width_cm=float(it.get("width_cm") or 35.0),
+            depth_cm=float(it.get("depth_cm") or 40.0),
+            height_cm=float(it.get("height_cm") or 25.0),
+            weight_kg=float(it.get("weight_kg") or 5.0),
+            is_fragile=bool(it.get("is_fragile")),
+            is_heavy=bool(it.get("is_heavy")),
+            requires_cold=bool(it.get("requires_cold")),
+            delivery_order=int(it.get("delivery_order") or 1),
+            order_code=str(it.get("order_code") or ""),
+            customer_name=str(it.get("customer_name") or "Khách hàng"),
+            eta=str(it.get("eta") or "")
+        ))
+
+    packer = BinPacker3D()
+    packing_result = packer.pack(cargo_items, vehicle_cargo)
+    debate_summary = ai_debate_council.debate_loading_plan(packing_result, vehicle_cargo, route_id=route_id)
+
+    return {
+        "success": True,
+        "debate_summary": debate_summary.to_dict(),
+        "packing_plan": packing_result.to_dict()
+    }
+
+
+@app.get("/api/packing/debate/logs")
+async def api_get_debate_logs(limit: int = 10):
+    """Lấy danh sách nhật ký tranh biện đã lưu trong MySQL flexvrp."""
+    logs = get_ai_debate_logs(limit=limit)
+    return {"success": True, "logs": logs}
 
 
 if __name__ == "__main__":

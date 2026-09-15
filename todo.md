@@ -27,36 +27,36 @@
 
 ### 1.1 Database Migrations
 
-- [ ] 🔴 Tạo migration `create_users_table` — Thêm cột `role` (enum: admin, carrier, retailer), `phone`, `address`, `latitude`, `longitude`
-- [ ] 🔴 Tạo migration `create_warehouses_table` — FK `user_id` (carrier), tọa độ, `is_active`
-- [ ] 🔴 Tạo migration `create_products_table` — FK `warehouse_id`, SKU unique, kích thước (D×R×C), `weight_kg`, `is_heavy`, `is_fragile`, `stock_quantity`
-- [ ] 🔴 Tạo migration `create_vehicles_table` — FK `user_id` (carrier), `license_plate` unique, kích thước lòng thùng, `max_weight_kg`, computed `max_volume_cm3`, `status`, `cost_per_km`
-- [ ] 🔴 Tạo migration `create_orders_table` — FK `retailer_id`, `warehouse_id`, `order_code` unique, `status` enum (7 trạng thái), `time_window_start/end`, tổng weight/volume/amount
-- [ ] 🔴 Tạo migration `create_order_items_table` — FK `order_id`, `product_id`, `quantity`, `unit_price`, `subtotal`, `item_weight_kg`, `item_volume_cm3`
-- [ ] 🔴 Tạo migration `create_routes_table` — FK `carrier_id`, `vehicle_id`, `route_code` unique, `delivery_date`, `period_index`, `status`, `solver_metadata` (JSON)
-- [ ] 🔴 Tạo migration `create_route_stops_table` — FK `route_id`, `order_id`, `stop_sequence`, tọa độ, ETA/ETD, `distance_from_prev_km`, `duration_from_prev_min`, unique constraint `[route_id, stop_sequence]`
-- [ ] 🔴 Tạo migration `create_loading_plans_table` — FK `route_id`, `order_item_id`, `vehicle_id`, tọa độ `pos_x/y/z_cm`, kích thước xếp, `rotation_axis`, `loading_sequence`
+- [x] 🔴 Tạo migration `create_users_table` — Thêm cột `role` (enum: admin, carrier, retailer), `phone`, `address`, `latitude`, `longitude`
+- [x] 🔴 Tạo migration `create_warehouses_table` — FK `user_id` (carrier), tọa độ, `is_active`
+- [x] 🔴 Tạo migration `create_products_table` — FK `warehouse_id`, SKU unique, kích thước (D×R×C), `weight_kg`, `is_heavy`, `is_fragile`, `stock_quantity`
+- [x] 🔴 Tạo migration `create_vehicles_table` — FK `user_id` (carrier), `license_plate` unique, kích thước lòng thùng, `max_weight_kg`, computed `max_volume_cm3`, `status`, `cost_per_km`
+- [x] 🔴 Tạo migration `create_orders_table` — FK `retailer_id`, `warehouse_id`, `order_code` unique, `status` enum (7 trạng thái), `time_window_start/end`, tổng weight/volume/amount
+- [x] 🔴 Tạo migration `create_order_items_table` — FK `order_id`, `product_id`, `quantity`, `unit_price`, `subtotal`, `item_weight_kg`, `item_volume_cm3`
+- [x] 🔴 Tạo migration `create_routes_table` — FK `carrier_id`, `vehicle_id`, `route_code` unique, `delivery_date`, `period_index`, `status`, `solver_metadata` (JSON)
+- [x] 🔴 Tạo migration `create_route_stops_table` — FK `route_id`, `order_id`, `stop_sequence`, tọa độ, ETA/ETD, `distance_from_prev_km`, `duration_from_prev_min`, unique constraint `[route_id, stop_sequence]`
+- [x] 🔴 Tạo migration `create_loading_plans_table` — FK `route_id`, `order_item_id`, `vehicle_id`, tọa độ `pos_x/y/z_cm`, kích thước xếp, `rotation_axis`, `loading_sequence`
 
 ### 1.2 Eloquent Models & Relationships
 
-- [ ] 🔴 Tạo Model `User` — Relationships: `hasMany(Warehouse)`, `hasMany(Vehicle)`, `hasMany(Order)` (as retailer), `hasMany(Route)` (as carrier)
-- [ ] 🔴 Tạo Model `Warehouse` — Relationships: `belongsTo(User)`, `hasMany(Product)`, `hasMany(Order)`
-- [ ] 🔴 Tạo Model `Product` — Relationships: `belongsTo(Warehouse)`, `hasMany(OrderItem)`. Accessors: `volume_cm3` (computed)
-- [ ] 🔴 Tạo Model `Vehicle` — Relationships: `belongsTo(User)`, `hasMany(Route)`, `hasMany(LoadingPlan)`
-- [ ] 🔴 Tạo Model `Order` — Relationships: `belongsTo(User)` (retailer), `belongsTo(Warehouse)`, `hasMany(OrderItem)`, `hasMany(RouteStop)`
-- [ ] 🔴 Tạo Model `OrderItem` — Relationships: `belongsTo(Order)`, `belongsTo(Product)`, `hasMany(LoadingPlan)`
-- [ ] 🔴 Tạo Model `Route` — Relationships: `belongsTo(User)` (carrier), `belongsTo(Vehicle)`, `hasMany(RouteStop)`, `hasMany(LoadingPlan)`
-- [ ] 🔴 Tạo Model `RouteStop` — Relationships: `belongsTo(Route)`, `belongsTo(Order)`
-- [ ] 🔴 Tạo Model `LoadingPlan` — Relationships: `belongsTo(Route)`, `belongsTo(OrderItem)`, `belongsTo(Vehicle)`
+- [x] 🔴 Tạo Model `User` — Relationships: `hasMany(Warehouse)`, `hasMany(Vehicle)`, `hasMany(Order)` (as retailer), `hasMany(Route)` (as carrier)
+- [x] 🔴 Tạo Model `Warehouse` — Relationships: `belongsTo(User)`, `hasMany(Product)`, `hasMany(Order)`
+- [x] 🔴 Tạo Model `Product` — Relationships: `belongsTo(Warehouse)`, `hasMany(OrderItem)`. Accessors: `volume_cm3` (computed)
+- [x] 🔴 Tạo Model `Vehicle` — Relationships: `belongsTo(User)`, `hasMany(Route)`, `hasMany(LoadingPlan)`
+- [x] 🔴 Tạo Model `Order` — Relationships: `belongsTo(User)` (retailer), `belongsTo(Warehouse)`, `hasMany(OrderItem)`, `hasMany(RouteStop)`
+- [x] 🔴 Tạo Model `OrderItem` — Relationships: `belongsTo(Order)`, `belongsTo(Product)`, `hasMany(LoadingPlan)`
+- [x] 🔴 Tạo Model `Route` — Relationships: `belongsTo(User)` (carrier), `belongsTo(Vehicle)`, `hasMany(RouteStop)`, `hasMany(LoadingPlan)`
+- [x] 🔴 Tạo Model `RouteStop` — Relationships: `belongsTo(Route)`, `belongsTo(Order)`
+- [x] 🔴 Tạo Model `LoadingPlan` — Relationships: `belongsTo(Route)`, `belongsTo(OrderItem)`, `belongsTo(Vehicle)`
 
 ### 1.3 Seeders & Factories
 
-- [ ] 🟡 Tạo `UserSeeder` — Seed 1 Admin, 1 Carrier, 4 Retailers (tạp hóa HCM)
-- [ ] 🟡 Tạo `WarehouseSeeder` — Seed 1 kho nhà máy (với tọa độ thực tế HCM)
-- [ ] 🟡 Tạo `ProductSeeder` — Seed 20–30 mặt hàng mẫu (thực phẩm, mỹ phẩm, nước giải khát) với kích thước D×R×C, khối lượng, thuộc tính heavy/fragile
-- [ ] 🟡 Tạo `VehicleSeeder` — Seed 2–3 xe tải mẫu (xe nhỏ 1T, xe trung 2.5T, xe lớn 5T) với kích thước lòng thùng
-- [ ] 🟡 Tạo `OrderSeeder` — Seed 4–6 đơn hàng mẫu cho kịch bản MVP (4 tiệm tạp hóa)
-- [ ] 🟡 Viết `DatabaseSeeder` tổng hợp — Gọi tất cả seeders theo đúng thứ tự dependency
+- [x] 🟡 Tạo `UserSeeder` — Seed 1 Admin, 1 Carrier, 4 Retailers (tạp hóa HCM)
+- [x] 🟡 Tạo `WarehouseSeeder` — Seed 1 kho nhà máy (với tọa độ thực tế HCM)
+- [x] 🟡 Tạo `ProductSeeder` — Seed 20–30 mặt hàng mẫu (thực phẩm, mỹ phẩm, nước giải khát) với kích thước D×R×C, khối lượng, thuộc tính heavy/fragile
+- [x] 🟡 Tạo `VehicleSeeder` — Seed 2–3 xe tải mẫu (xe nhỏ 1T, xe trung 2.5T, xe lớn 5T) với kích thước lòng thùng
+- [x] 🟡 Tạo `OrderSeeder` — Seed 4–6 đơn hàng mẫu cho kịch bản MVP (4 tiệm tạp hóa)
+- [x] 🟡 Viết `DatabaseSeeder` tổng hợp — Gọi tất cả seeders theo đúng thứ tự dependency
 
 ### 1.4 Testing & Validation
 
@@ -146,12 +146,12 @@
 
 ### 3.1 Python Solver Service Setup
 
-- [ ] 🔴 Tạo thư mục `solver/` chứa Python project (FastAPI + Celery)
-- [ ] 🔴 Cấu hình `solver/requirements.txt` — FastAPI, Celery, Redis, OR-Tools/PuLP, numpy, scipy
-- [ ] 🔴 Tạo `solver/app/main.py` — FastAPI entry point với endpoint `POST /solve`
-- [ ] 🔴 Tạo `solver/app/vrp_solver.py` — VRP Solver module (FMPMD-CVRP-TW Matheuristic)
-- [ ] 🔴 Tạo `solver/app/bin_packing.py` — 3D Bin Packing module (LIFO + Stacking constraints)
-- [ ] 🔴 Tạo `solver/app/validation.py` — Input validation (Poka-yoke) trước khi chạy solver
+- [x] 🔴 Tạo thư mục `solver/` chứa Python project (FastAPI + Celery)
+- [x] 🔴 Cấu hình `solver/requirements.txt` — FastAPI, Celery, Redis, OR-Tools/PuLP, numpy, scipy
+- [x] 🔴 Tạo `solver/app/main.py` — FastAPI entry point với endpoint `POST /solve`
+- [x] 🔴 Tạo `solver/app/vrp_solver.py` — VRP Solver module (FMPMD-CVRP-TW Matheuristic)
+- [x] 🔴 Tạo `solver/app/bin_packing.py` — 3D Bin Packing module (LIFO + Stacking constraints)
+- [x] 🔴 Tạo `solver/app/validation.py` — Input validation (Poka-yoke) trước khi chạy solver
 - [ ] 🟡 Tạo `solver/Dockerfile` — Docker image cho Python service
 - [ ] 🟡 Viết unit tests cho VRP solver với test case nhỏ (3 orders, 1 vehicle)
 - [ ] 🟡 Viết unit tests cho 3D Bin Packing (kiểm tra LIFO order, stacking rules)

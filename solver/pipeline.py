@@ -19,6 +19,7 @@ from db import (
     get_vehicles, get_locations, save_delivery_schedule,
     create_optimization_run, update_optimization_progress,
     complete_optimization_run, get_optimization_run,
+    get_vehicle_cargo_spec, get_order_items, get_or_estimate_cargo_dimensions, delete_order,
 )
 from dinic_flow import (
     split_orders, consolidate_small_orders,
@@ -29,9 +30,128 @@ from matheuristic import (
     Stop, Route, Solution, run_matheuristic,
 )
 from vrp_engine import haversine_distance
+from bin_packing import BinPacker2D, CargoItem, VehicleCargo
 
 
-def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: str = None) -> dict:
+def _generate_packing_plan_for_route(r, stops_detail: list) -> dict:
+    """
+    Tạo sơ đồ xếp hàng 2D cho một chuyến xe dựa trên thông số thùng xe
+    và danh sách các kiện hàng cần giao theo thứ tự dừng.
+    """
+    try:
+        v_spec = get_vehicle_cargo_spec(r.vehicle_id) if hasattr(r, 'vehicle_id') else {}
+        vehicle_cargo = VehicleCargo(
+            vehicle_id=getattr(r, 'vehicle_id', 0),
+            vehicle_name=getattr(r, 'vehicle_name', 'Xe tải'),
+            cargo_width_cm=float(v_spec.get("cargo_width_cm") or 190.0),
+            cargo_depth_cm=float(v_spec.get("cargo_depth_cm") or 430.0),
+            cargo_height_cm=float(v_spec.get("cargo_height_cm") or 200.0),
+            max_weight_kg=float(getattr(r, 'capacity_kg', 2500.0) or 2500.0),
+            door_position=v_spec.get("door_position") or "rear",
+            max_layers=int(v_spec.get("max_layers") or 4)
+        )
+
+        cargo_items = []
+        item_counter = 0
+
+        # Lấy các trạm giao khách hàng (bỏ qua depot)
+        customer_stops = [st for st in stops_detail if st.get("type") == "customer"]
+
+        for st in customer_stops:
+            delivery_order = int(st.get("step") or 1)
+            deliveries = st.get("deliveries", [])
+            if not deliveries:
+                deliveries = [{
+                    "customer_name": st.get("name", "Khách hàng"),
+                    "order_code": st.get("order_code", ""),
+                    "quantity": st.get("quantity", 1),
+                    "weight_kg": st.get("weight_kg", 10.0)
+                }]
+
+            for deliv in deliveries:
+                code = deliv.get("order_code", "")
+                cust_name = deliv.get("customer_name", st.get("name", "Khách hàng"))
+                deliv_qty = max(1, int(deliv.get("quantity") or 1))
+
+                order_obj = get_order_by_code(code) if code else None
+                items_raw = get_order_items(order_obj["id"]) if order_obj else []
+
+                if not items_raw:
+                    name = f"Kiện hàng {code}" if code else f"Hàng giao {cust_name}"
+                    dims = get_or_estimate_cargo_dimensions(name, float(deliv.get("weight_kg") or 10.0))
+                    item_counter += 1
+                    cargo_items.append(CargoItem(
+                        item_id=f"ITM_{item_counter:03d}",
+                        name=name,
+                        width_cm=dims["width_cm"],
+                        depth_cm=dims["depth_cm"],
+                        height_cm=dims["height_cm"],
+                        weight_kg=float(deliv.get("weight_kg") or 10.0),
+                        is_fragile=bool(dims.get("is_fragile")),
+                        is_heavy=bool(dims.get("is_heavy")),
+                        requires_cold=bool(dims.get("requires_cold")),
+                        delivery_order=delivery_order,
+                        order_code=code,
+                        customer_name=cust_name
+                    ))
+                else:
+                    tot_order_qty = sum(it.get("quantity", 1) for it in items_raw) or 1
+                    ratio = min(1.0, max(0.05, deliv_qty / tot_order_qty))
+
+                    for row in items_raw:
+                        p_name = row.get("product_name", "Hàng hóa")
+                        p_qty = max(1, int(round(row.get("quantity", 1) * ratio)))
+                        p_wt = float(row.get("weight_per_unit_kg") or 5.0)
+                        p_w = float(row.get("width_cm") or 35.0)
+                        p_d = float(row.get("depth_cm") or 40.0)
+                        p_h = float(row.get("height_cm") or 25.0)
+                        p_frag = bool(row.get("is_fragile"))
+                        p_heavy = bool(row.get("is_heavy"))
+                        p_cold = bool(row.get("requires_cold"))
+
+                        # Đóng gói theo kiện hoặc lô nhỏ
+                        lot_size = 1
+                        if p_qty > 20:
+                            lot_size = 5
+                        elif p_qty > 10:
+                            lot_size = 2
+
+                        num_lots = max(1, p_qty // lot_size)
+                        lot_weight = round(p_wt * lot_size, 1)
+
+                        for l_idx in range(num_lots):
+                            item_counter += 1
+                            suffix = f" (x{lot_size})" if lot_size > 1 else ""
+                            cargo_items.append(CargoItem(
+                                item_id=f"ITM_{item_counter:03d}",
+                                name=f"{p_name}{suffix}",
+                                width_cm=p_w,
+                                depth_cm=p_d,
+                                height_cm=p_h,
+                                weight_kg=lot_weight,
+                                is_fragile=p_frag,
+                                is_heavy=p_heavy,
+                                requires_cold=p_cold,
+                                delivery_order=delivery_order,
+                                order_code=code,
+                                customer_name=cust_name,
+                                quantity_index=l_idx + 1
+                            ))
+
+        packer = BinPacker2D()
+        packing_result = packer.pack_with_debate(cargo_items, vehicle_cargo)
+        return packing_result.to_dict()
+    except Exception as e:
+        print(f"[Pipeline] Warning generate packing plan: {e}")
+        return {
+            "placed_items": [],
+            "unplaced_items": [],
+            "warnings": [f"Lỗi tính toán sơ đồ: {str(e)}"],
+            "debate_verified": False
+        }
+
+
+def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: str = None, order_limit: int = None) -> dict:
     """
     Chạy toàn bộ pipeline giải thuật Phase II:
     1. Đọc dữ liệu từ DB (Orders, Customers, Vehicles)
@@ -45,15 +165,34 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
         run_id = f"opt_{uuid.uuid4().hex[:8]}"
     
     # 1. Nạp dữ liệu đơn hàng trước để lấy ngày
-    orders_raw = get_orders()
+    all_orders = get_orders()
+    valid_orders = []
+    
+    # Lọc và xóa thẳng các đơn lỗi khỏi DB trước khi lấy limit
+    for o in all_orders:
+        qty = o.get('total_quantity', 0)
+        lat = o.get('customer_lat')
+        lon = o.get('customer_lon')
+        if qty <= 0 or not lat or not lon:
+            try:
+                delete_order(o['id'])
+            except Exception:
+                pass
+        else:
+            valid_orders.append(o)
+            
+    orders_raw = valid_orders
     today = datetime.now().date()
     today_str = today.strftime("%Y-%m-%d")
 
     # Kế hoạch giao hàng bắt đầu từ hôm nay cho planning_days ngày
     date_list = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(planning_days)]
 
-    # Sắp xếp đơn theo ngày đặt hàng: đặt sớm nhất xếp trước (FIFO / Aging)
-    orders_raw.sort(key=lambda o: str(o.get("order_date") or o.get("delivery_date_preferred") or today_str))
+    # Sắp xếp đơn: Đơn gấp (is_urgent=1) lên đầu, sau đó ưu tiên các đơn hàng nhỏ (quantity nhỏ) để giao được nhiều đơn nhất, rồi đến ngày.
+    orders_raw.sort(key=lambda o: (-o.get("is_urgent", 0), o.get("total_quantity", 0), str(o.get("order_date") or o.get("delivery_date_preferred") or today_str)))
+
+    if order_limit and order_limit > 0:
+        orders_raw = orders_raw[:order_limit]
 
     distant_orders_count = 0
         
@@ -86,9 +225,8 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
     update_optimization_progress(run_id, 18, "✂️ Chuẩn bị dữ liệu cho Dinic Flow...")
     time.sleep(0.15)
     update_optimization_progress(run_id, 22, "✂️ Phân chia đơn hàng lớn (Dinic's Maximum Flow)...")
-    orders_info = build_order_infos_from_db()
-    if not orders_info:
-        for o in orders_raw:
+    orders_info = []
+    for o in orders_raw:
             qty = o.get('total_quantity', 0)
             if qty <= 0:
                 continue
@@ -398,7 +536,8 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
                     "waybill_code": waybill_code,
                     "merged_stops": stops_detail,
                     "raw_stops": raw_stops,
-                    "orders_count": sum(len(st.get("deliveries", [])) if "deliveries" in st else 1 for st in stops_detail if st["type"] == "customer")
+                    "orders_count": sum(len(st.get("deliveries", [])) if "deliveries" in st else 1 for st in stops_detail if st["type"] == "customer"),
+                    "packing_plan": _generate_packing_plan_for_route(r, stops_detail)
                 })
 
         schedule_by_day.append({
@@ -474,19 +613,21 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
     return result
 
 
-def start_async_pipeline(planning_days: int = 5) -> str:
+def start_async_pipeline(planning_days: int = 5, order_limit: int = None) -> str:
     """Khởi động pipeline trong thread riêng để không block FastAPI server."""
     run_id = f"opt_{uuid.uuid4().hex[:8]}"
     
     # Tạo trước run trong DB
     orders_raw = get_orders()
+    if order_limit and order_limit > 0:
+        orders_raw = orders_raw[:order_limit]
     vehicles_raw = get_vehicles()
     create_optimization_run(run_id, len(orders_raw), len(vehicles_raw), planning_days)
     update_optimization_progress(run_id, 5, "Khởi động tiến trình tối ưu...")
 
     def _worker():
         try:
-            run_full_pipeline(planning_days=planning_days, run_id=run_id)
+            run_full_pipeline(planning_days=planning_days, run_id=run_id, order_limit=order_limit)
         except Exception as e:
             print(f"[Pipeline] Error in run {run_id}: {e}")
             complete_optimization_run(run_id, error_message=str(e))
