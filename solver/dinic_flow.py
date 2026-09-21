@@ -299,7 +299,24 @@ def split_orders(
         if assigned_total < order.total_quantity:
             remaining = order.total_quantity - assigned_total
             print(f"[Dinic] ⚠️ Đơn {order.order_code}: còn {remaining}/{order.total_quantity} "
-                  f"units chưa phân bổ (thiếu xe/ngày)")
+                  f"units chưa phân bổ (thiếu xe/ngày) -> ÉP GÁN ĐỂ KHÔNG MẤT ĐƠN")
+            
+            # Ép gán vào xe đầu tiên, ngày đầu tiên để Matheuristic tự cân bằng lại
+            vehicle = vehicles[0]
+            weight_per_unit = order.total_weight_kg / max(order.total_quantity, 1)
+            date_str = delivery_dates[0] if delivery_dates and len(delivery_dates) > 0 else "Day-1"
+            
+            assignments.append(DeliveryAssignment(
+                order_id=order.order_id,
+                order_code=order.order_code,
+                customer_name=order.customer_name,
+                day_index=0,
+                delivery_date=date_str,
+                vehicle_id=vehicle.vehicle_id,
+                vehicle_name=vehicle.vehicle_name,
+                assigned_quantity=remaining,
+                assigned_weight_kg=round(remaining * weight_per_unit, 2),
+            ))
 
     return assignments
 

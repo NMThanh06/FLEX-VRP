@@ -13,6 +13,7 @@ Mở trình duyệt:
 import os
 import sys
 import json
+import asyncio
 from pathlib import Path
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -1189,13 +1190,54 @@ async def api_route_geometry(request: Request):
 
 
 # ═══════════════════════════════════════
+# PHASE II: Datasets API
+# ═══════════════════════════════════════
+
+from db import (
+    get_datasets, create_dataset, rename_dataset, delete_dataset, set_active_dataset
+)
+
+@app.get("/api/datasets")
+async def api_get_datasets():
+    return {"success": True, "datasets": get_datasets()}
+
+@app.post("/api/datasets")
+async def api_create_dataset(request: Request):
+    body = await request.json()
+    name = body.get("name", "Bảng mới")
+    dataset = create_dataset(name)
+    return {"success": True, "dataset": dataset}
+
+@app.put("/api/datasets/{dataset_id}")
+async def api_rename_dataset(dataset_id: int, request: Request):
+    body = await request.json()
+    name = body.get("name")
+    if not name:
+        return JSONResponse({"error": "Tên không hợp lệ"}, status_code=400)
+    success = rename_dataset(dataset_id, name)
+    return {"success": success}
+
+@app.delete("/api/datasets/{dataset_id}")
+async def api_delete_dataset(dataset_id: int):
+    success = delete_dataset(dataset_id)
+    if not success:
+        return JSONResponse({"error": "Không thể xóa bảng này (có thể là bảng mặc định)"}, status_code=400)
+    return {"success": True}
+
+@app.post("/api/datasets/{dataset_id}/activate")
+async def api_activate_dataset(dataset_id: int):
+    success = set_active_dataset(dataset_id)
+    return {"success": success}
+
+
+# ═══════════════════════════════════════
 # PHASE II: B2B Order Management & Optimization
 # ═══════════════════════════════════════
 
 @app.get("/api/b2b/orders")
-async def api_b2b_orders(status: str = None):
+async def api_b2b_orders(status: str = None, dataset_id: int = None):
     """Lấy danh sách đơn hàng B2B."""
-    return {"success": True, "orders": get_orders(status)}
+    return {"success": True, "orders": get_orders(status, dataset_id)}
 
 
 @app.get("/api/b2b/products")
@@ -1264,13 +1306,18 @@ async def api_b2b_save_order(request: Request):
             float(body.get("lat", 10.776)),
             float(body.get("lon", 106.699))
         )
+    qty = int(body.get("total_quantity") or 0)
+    wt = float(body.get("total_weight_kg") or 0)
+    dataset_id = int(body.get("dataset_id") or 1)
+    
     order = save_order(
         customer_id=cust_id,
         order_code=body.get("order_code"),
+        dataset_id=dataset_id,
         status=body.get("status", "confirmed"),
         is_urgent=int(body.get("is_urgent", 0)),
-        total_quantity=int(body.get("total_quantity", 50)),
-        total_weight_kg=float(body.get("total_weight_kg", 250)),
+        total_quantity=qty,
+        total_weight_kg=wt,
         time_window_start=body.get("time_window_start", "08:00"),
         time_window_end=body.get("time_window_end", "17:00"),
         order_date=body.get("order_date") or body.get("delivery_date_preferred"),
@@ -1281,10 +1328,11 @@ async def api_b2b_save_order(request: Request):
     if isinstance(body.get("items"), list) and body["items"]:
         replace_order_items(order["id"], body["items"])
     elif body.get("item_name"):
+        weight_per = round(wt / max(1, qty), 1) if qty > 0 else 0
         replace_order_items(order["id"], [{
             "product_name": body.get("item_name"),
-            "quantity": int(body.get("total_quantity", 50)),
-            "weight_per_unit_kg": round(float(body.get("total_weight_kg", 250)) / max(1, int(body.get("total_quantity", 50))), 1),
+            "quantity": qty,
+            "weight_per_unit_kg": weight_per,
             "width_cm": float(body.get("width_cm", 35)),
             "depth_cm": float(body.get("depth_cm", 40)),
             "height_cm": float(body.get("height_cm", 25)),
@@ -1367,7 +1415,7 @@ async def api_chat(request: Request):
     message = body.get("message", "")
     session_id = body.get("session_id", "default")
     provider = body.get("provider", "gemini")
-    res = process_user_chat(message, session_id=session_id, preferred_provider=provider)
+    res = await asyncio.to_thread(process_user_chat, message, session_id=session_id, preferred_provider=provider)
     return res
 
 
@@ -1376,10 +1424,205 @@ async def api_chat_upload(request: Request):
     """Upload file đơn hàng (CSV/Text/Excel) để AI đọc."""
     form = await request.form()
     file_obj = form.get("file")
+    dataset_id = form.get("dataset_id", "1")
+    message = form.get("message", "")
     if not file_obj:
         return JSONResponse({"error": "Chưa chọn file để tải lên"}, status_code=400)
     contents = await file_obj.read()
-    res = process_uploaded_file(contents, file_obj.filename)
+    try:
+        res = await asyncio.to_thread(process_uploaded_file, contents, file_obj.filename, int(dataset_id), message)
+        return res
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"success": False, "reply": f"⚠️ Lỗi xử lý file: {str(e)}"}, status_code=200)
+
+# ═══════════════════════════════════════
+# FLOOD RISK & HOLIDAY ENDPOINTS
+# ═══════════════════════════════════════
+
+# Danh sách tuyến đường thường xuyên ngập tại TPHCM (nguồn: báo chí, dữ liệu công khai)
+FLOOD_PRONE_ROADS = [
+    {"name": "Nguyễn Hữu Cảnh", "district": "Bình Thạnh", "severity": 0.95, "lat": 10.7892, "lng": 106.7127},
+    {"name": "Phan Huy Ích", "district": "Gò Vấp", "severity": 0.75, "lat": 10.8364, "lng": 106.6535},
+    {"name": "Lê Đức Thọ", "district": "Gò Vấp", "severity": 0.70, "lat": 10.8320, "lng": 106.6378},
+    {"name": "Huỳnh Tấn Phát", "district": "Quận 7", "severity": 0.85, "lat": 10.7389, "lng": 106.7261},
+    {"name": "Quốc lộ 13", "district": "Thủ Đức", "severity": 0.65, "lat": 10.8618, "lng": 106.7190},
+    {"name": "Tô Ngọc Vân", "district": "Thủ Đức", "severity": 0.60, "lat": 10.8565, "lng": 106.7518},
+    {"name": "Đỗ Xuân Hợp", "district": "Quận 9", "severity": 0.70, "lat": 10.8335, "lng": 106.7817},
+    {"name": "An Dương Vương", "district": "Quận 5/8", "severity": 0.80, "lat": 10.7517, "lng": 106.6560},
+    {"name": "Hồ Học Lãm", "district": "Bình Tân", "severity": 0.75, "lat": 10.7279, "lng": 106.6072},
+    {"name": "Kinh Dương Vương", "district": "Bình Tân/Q6", "severity": 0.80, "lat": 10.7429, "lng": 106.6230},
+    {"name": "Nguyễn Văn Quá", "district": "Quận 12", "severity": 0.65, "lat": 10.8552, "lng": 106.6305},
+    {"name": "Lê Văn Khương", "district": "Quận 12", "severity": 0.60, "lat": 10.8477, "lng": 106.6464},
+    {"name": "Trần Xuân Soạn", "district": "Quận 7", "severity": 0.75, "lat": 10.7445, "lng": 106.7199},
+    {"name": "Bùi Hữu Nghĩa", "district": "Bình Thạnh", "severity": 0.55, "lat": 10.7958, "lng": 106.6988},
+    {"name": "Ung Văn Khiêm", "district": "Bình Thạnh", "severity": 0.70, "lat": 10.8013, "lng": 106.7073},
+    {"name": "Phan Xích Long", "district": "Phú Nhuận", "severity": 0.50, "lat": 10.7984, "lng": 106.6813},
+    {"name": "Võ Văn Ngân", "district": "Thủ Đức", "severity": 0.65, "lat": 10.8498, "lng": 106.7685},
+    {"name": "Nguyễn Xí", "district": "Bình Thạnh", "severity": 0.60, "lat": 10.8054, "lng": 106.7000},
+    {"name": "Thành Thái", "district": "Quận 10", "severity": 0.55, "lat": 10.7730, "lng": 106.6673},
+    {"name": "Lý Thường Kiệt", "district": "Quận 10/11", "severity": 0.50, "lat": 10.7746, "lng": 106.6579},
+    {"name": "Cách Mạng Tháng 8", "district": "Quận 10/3", "severity": 0.55, "lat": 10.7832, "lng": 106.6659},
+    {"name": "Ba Tháng Hai", "district": "Quận 10", "severity": 0.50, "lat": 10.7730, "lng": 106.6676},
+    {"name": "Hậu Giang", "district": "Quận 6", "severity": 0.70, "lat": 10.7486, "lng": 106.6302},
+    {"name": "Trường Chinh", "district": "Tân Bình/Q12", "severity": 0.55, "lat": 10.8182, "lng": 106.6312},
+]
+
+# Danh sách ngày lễ ảnh hưởng giao thông & logistics tại VN
+VN_HOLIDAYS = [
+    {"name": "Tết Dương lịch", "date": "01-01", "duration": 1, "impact": "high"},
+    {"name": "Tết Nguyên đán (ước tính)", "date": "01-28", "duration": 7, "impact": "critical"},
+    {"name": "Giỗ Tổ Hùng Vương", "date": "04-07", "duration": 1, "impact": "high"},
+    {"name": "Ngày Giải phóng miền Nam", "date": "04-30", "duration": 1, "impact": "critical"},
+    {"name": "Quốc tế Lao động", "date": "05-01", "duration": 1, "impact": "critical"},
+    {"name": "Quốc khánh", "date": "09-02", "duration": 2, "impact": "critical"},
+    {"name": "Trung thu", "date": "09-17", "duration": 1, "impact": "high"},
+    {"name": "Noel", "date": "12-25", "duration": 1, "impact": "high"},
+]
+
+
+@app.get("/api/flood-risk")
+async def api_flood_risk():
+    """Tính toán nguy cơ ngập dựa trên dự báo mưa từ Open-Meteo + lịch sử ngập."""
+    import urllib.request
+    import urllib.error
+    
+    # Lấy dự báo mưa 48h từ Open-Meteo (TPHCM: 10.8231, 106.6297)
+    rain_data = {"hourly_max_mm": 0, "total_24h_mm": 0, "rain_hours": []}
+    try:
+        url = (
+            "https://api.open-meteo.com/v1/forecast?"
+            "latitude=10.8231&longitude=106.6297"
+            "&hourly=precipitation,rain"
+            "&timezone=Asia/Ho_Chi_Minh"
+            "&forecast_days=2"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "FLEX-VRP/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            meteo = json.loads(resp.read().decode('utf-8'))
+            hourly = meteo.get("hourly", {})
+            precip = hourly.get("precipitation", [])
+            times = hourly.get("time", [])
+            
+            if precip:
+                rain_data["hourly_max_mm"] = max(precip)
+                rain_data["total_24h_mm"] = sum(precip[:24])
+                # Tìm giờ mưa nặng
+                for i, (t, p) in enumerate(zip(times, precip)):
+                    if p > 5:  # > 5mm/h = mưa đáng kể
+                        rain_data["rain_hours"].append({"time": t, "mm": p})
+    except Exception as e:
+        print(f"[API] Open-Meteo error: {e}")
+    
+    # Tính nguy cơ ngập cho từng tuyến đường
+    max_rain = rain_data["hourly_max_mm"]
+    total_rain = rain_data["total_24h_mm"]
+    
+    flood_roads = []
+    for road in FLOOD_PRONE_ROADS:
+        # Công thức nguy cơ: severity_history * rain_factor
+        if max_rain > 50:
+            rain_factor = 1.0  # Mưa rất lớn
+        elif max_rain > 30:
+            rain_factor = 0.75
+        elif max_rain > 15:
+            rain_factor = 0.45
+        elif max_rain > 5:
+            rain_factor = 0.20
+        else:
+            rain_factor = 0.05
+        
+        risk_score = round(road["severity"] * rain_factor * 100, 1)
+        
+        status = "safe"
+        if risk_score > 60:
+            status = "danger"
+        elif risk_score > 30:
+            status = "warning"
+        
+        flood_roads.append({
+            "name": road["name"],
+            "district": road["district"],
+            "risk_score": risk_score,
+            "status": status,
+            "lat": road["lat"],
+            "lng": road["lng"],
+        })
+    
+    # Sắp xếp theo risk_score giảm dần
+    flood_roads.sort(key=lambda x: x["risk_score"], reverse=True)
+    
+    # Tổng quan
+    danger_count = sum(1 for r in flood_roads if r["status"] == "danger")
+    warning_count = sum(1 for r in flood_roads if r["status"] == "warning")
+    
+    overall = "safe"
+    if danger_count > 3:
+        overall = "danger"
+    elif danger_count > 0 or warning_count > 3:
+        overall = "warning"
+    
+    return {
+        "success": True,
+        "overall_status": overall,
+        "danger_count": danger_count,
+        "warning_count": warning_count,
+        "rain_forecast": {
+            "max_hourly_mm": rain_data["hourly_max_mm"],
+            "total_24h_mm": round(total_rain, 1),
+            "heavy_rain_hours": rain_data["rain_hours"][:6],
+        },
+        "roads": flood_roads,
+    }
+
+
+@app.get("/api/holidays")
+async def api_holidays():
+    """Trả về danh sách ngày lễ VN + countdown."""
+    from datetime import datetime, timedelta
+    
+    today = datetime.now()
+    current_year = today.year
+    
+    holidays = []
+    for h in VN_HOLIDAYS:
+        month, day = h["date"].split("-")
+        
+        # Thử năm nay, nếu đã qua thì lấy năm sau
+        try:
+            hdate = datetime(current_year, int(month), int(day))
+        except ValueError:
+            continue
+        
+        if hdate.date() < today.date():
+            hdate = datetime(current_year + 1, int(month), int(day))
+        
+        days_until = (hdate.date() - today.date()).days
+        
+        holidays.append({
+            "name": h["name"],
+            "date": hdate.strftime("%Y-%m-%d"),
+            "days_until": days_until,
+            "duration": h["duration"],
+            "impact": h["impact"],
+            "display_date": hdate.strftime("%d/%m/%Y"),
+        })
+    
+    # Sắp xếp theo ngày gần nhất
+    holidays.sort(key=lambda x: x["days_until"])
+    
+    # Ngày lễ sắp tới (trong 30 ngày)
+    upcoming = [h for h in holidays if h["days_until"] <= 30]
+    
+    return {
+        "success": True,
+        "upcoming": upcoming,
+        "all_holidays": holidays[:8],  # 8 ngày lễ gần nhất
+        "next_holiday": holidays[0] if holidays else None,
+    }
+
+
 # ═══════════════════════════════════════
 # PHASE 2: BIN PACKING 2D API ENDPOINTS
 # ═══════════════════════════════════════

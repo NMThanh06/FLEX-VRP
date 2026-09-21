@@ -80,6 +80,7 @@
             font-weight: 700;
             background: linear-gradient(135deg, var(--accent), #a78bfa);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -2784,6 +2785,17 @@
                             style="background:rgba(52,211,153,0.15);color:var(--green);border-color:rgba(52,211,153,0.3);">Phase
                             II</span>
                     </div>
+                    <div class="b2b-btn-group" style="margin-right: auto; gap: 12px;">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;background:var(--surface-2);padding:6px 12px;border-radius:8px;border:1px solid var(--border);">
+                            <span style="color:var(--text-dim)">Bảng DL:</span>
+                            <select id="datasetSelector" onchange="switchDataset(this.value)" style="background:transparent;border:none;color:#fff;font-weight:600;outline:none;cursor:pointer;padding-right:4px;">
+                                <option value="1">Bảng mặc định</option>
+                            </select>
+                            <button onclick="createNewDataset()" title="Tạo bảng mới" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0 4px;font-size:1.1rem;display:flex;align-items:center;justify-content:center;">➕</button>
+                            <button onclick="renameCurrentDataset()" title="Đổi tên bảng" style="background:none;border:none;color:var(--yellow);cursor:pointer;padding:0 4px;font-size:1.1rem;display:flex;align-items:center;justify-content:center;">✏️</button>
+                            <button onclick="deleteCurrentDataset()" title="Xóa bảng này" style="background:none;border:none;color:var(--red);cursor:pointer;padding:0 4px;font-size:1.1rem;display:flex;align-items:center;justify-content:center;">🗑️</button>
+                        </div>
+                    </div>
                     <div class="b2b-btn-group">
                         <button class="btn-b2b" onclick="openNewOrderModal()">
                             <span>➕</span> Thêm Đơn Hàng
@@ -2885,12 +2897,11 @@
                         <span>🚛 <strong id="sumVehicles">0</strong> xe</span>
                         <span>📏 <strong id="sumKm">0</strong> km</span>
                         <span>⏱️ <strong id="sumHours">0</strong>h</span>
-                        <span style="color:var(--green);font-weight:600;">💰 Tiết kiệm <strong
-                                id="sumSaved">0%</strong></span>
+                        <span id="sumSavedSpan" style="display:none;color:var(--green);font-weight:600;">💰 Tiết kiệm <strong id="sumSaved">0%</strong></span>
                     </div>
 
                     <!-- 4 KPI Metrics -->
-                    <div class="b2b-kpi-grid">
+                    <div class="b2b-kpi-grid" style="display:none !important;">
                         <div class="b2b-kpi-card green">
                             <span class="b2b-kpi-lbl">Tiết Kiệm Chi Phí</span>
                             <div class="b2b-kpi-val" id="kpiSavedPct">-0%</div>
@@ -2915,16 +2926,12 @@
 
                     <!-- Sub-view tabs -->
                     <div class="results-subtabs">
-                        <button class="res-subtab-btn active" onclick="switchResultTab('schedule', this)">📅 Lịch Điều
-                            Phối Xe</button>
-                        <button class="res-subtab-btn" onclick="switchResultTab('kpis', this)">📈 Đối Sánh Chi
-                            Phí</button>
-                        <button class="res-subtab-btn" onclick="switchResultTab('split', this)">✂️ Phân Chia Đơn
-                            (Dinic)</button>
+                        <button class="res-subtab-btn active" onclick="switchResultTab('schedule', this)">📅 Lịch Điều Phối Xe</button>
+                        <button class="res-subtab-btn" onclick="switchResultTab('split', this)">✂️ Phân Chia Đơn (Dinic)</button>
                     </div>
 
-                    <!-- Sub-view 1: Comparison Table -->
-                    <div id="resViewKpis" class="res-content-view">
+                    <!-- Sub-view 1: Comparison Table (Hidden) -->
+                    <div id="resViewKpis" class="res-content-view" style="display:none !important;">
                         <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
                             Đối sánh trực diện hiệu quả vận hành giữa phương án giao thủ công (từng chuyến đơn lẻ) và
                             thuật toán lai FLEX-VRP:
@@ -3015,29 +3022,28 @@
                     </div>
                 </div>
 
-                <!-- Quick Suggestion Chips -->
-                <div class="chat-quick-chips">
-                    <button class="chip-btn"
-                        onclick="sendQuickPrompt('Tạo đơn cho tiệm Cô Lan 60 thùng mì Hảo Hảo tại Quận 1')">💡 Tạo đơn
-                        60 thùng Q1</button>
-                    <button class="chip-btn" onclick="sendQuickPrompt('Tra cứu đơn LN1669')">💡 Tra cứu LN1669</button>
-                    <button class="chip-btn" onclick="sendQuickPrompt('Kiểm tra lịch xe chạy')">💡 Lịch điều
-                        phối</button>
-                </div>
-
-                <!-- File Upload Bar -->
-                <label class="chat-upload-zone" for="chatFileInput">
-                    <span>📎 Tải file đơn hàng (.csv, .xlsx, .txt)</span>
-                    <span style="font-size:0.68rem;opacity:0.7;">AI tự đọc</span>
-                    <input type="file" id="chatFileInput" accept=".csv,.txt,.xlsx,.json" style="display:none;"
-                        onchange="uploadChatFile(this)">
-                </label>
-
-                <!-- Chat Input -->
-                <div class="chat-input-row">
-                    <textarea class="chat-input" id="chatInput" placeholder="Nhập yêu cầu tạo đơn, tra cứu..." rows="1"
-                        onkeydown="onChatInputKey(event)"></textarea>
-                    <button class="chat-send-btn" onclick="sendChatMessage()" title="Gửi tin nhắn">➤</button>
+                <!-- Chat Input Area (Gemini Style) -->
+                <div class="chat-input-wrapper" style="padding: 12px; background: var(--surface-2); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;">
+                    <!-- File Preview Area -->
+                    <div id="chatFilePreview" style="display: none; align-items: center; gap: 8px; background: var(--surface); padding: 6px 12px; border-radius: 20px; width: fit-content; border: 1px solid var(--border);">
+                        <span style="font-size: 0.8rem; color: var(--text);">📎 <span id="chatFileName">filename.xlsx</span></span>
+                        <button onclick="removeAttachedChatFile()" style="background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; padding: 2px;">✕</button>
+                    </div>
+                    
+                    <!-- Input Row -->
+                    <div class="chat-input-row" style="display: flex; gap: 8px; padding: 0; border: none; background: transparent; align-items: flex-end;">
+                        <!-- File Upload Button -->
+                        <label for="chatFileInput" style="cursor: pointer; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text-dim); transition: all 0.2s; display: flex; align-items: center; justify-content: center; height: 42px;" title="Đính kèm file">
+                            <span style="font-size: 1.2rem;">📎</span>
+                            <input type="file" id="chatFileInput" accept=".csv,.txt,.xlsx,.json" style="display:none;" onchange="onChatFileSelected(this)">
+                        </label>
+                        
+                        <!-- Text Input -->
+                        <textarea class="chat-input" id="chatInput" placeholder="Nhập yêu cầu tạo đơn, tải file..." rows="1" onkeydown="onChatInputKey(event)" style="flex: 1; min-height: 42px; max-height: 120px; overflow-y: auto;"></textarea>
+                        
+                        <!-- Send Button -->
+                        <button class="chat-send-btn" onclick="sendChatMessage()" title="Gửi tin nhắn" style="height: 42px;">➤</button>
+                    </div>
                 </div>
             </aside>
         </div>
@@ -3163,6 +3169,7 @@
                                 <span style="font-size:0.85rem;color:#fbbf24;font-weight:700;">ĐƠN HÀNG CHI TIẾT: </span>
                                 <strong id="custCardCustomerName" style="font-size:0.95rem;color:#fff;">Chị A</strong>
                                 <span id="custCardOrderCode" style="font-size:0.75rem;color:var(--text-dim);margin-left:6px;">(#ORD-101)</span>
+                                <span id="custCardVisibleCountBadge" style="font-size:0.7rem;background:rgba(251,191,36,0.15);color:#fbbf24;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600;">(Đang hiện 3 đơn đầu)</span>
                             </div>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
@@ -3191,7 +3198,7 @@
                         </div>
                     </div>
 
-                    <!-- Bảng các kiện riêng của khách hàng này theo thứ tự bốc xếp từ trong ra -->
+                    <!-- Bảng các kiện riêng của khách hàng này theo thứ tự bốc xếp từ trong ra (Mặc định chỉ hiện 3 đơn đầu) -->
                     <div style="margin-top:10px;overflow-x:auto;">
                         <table style="width:100%;font-size:0.72rem;border-collapse:collapse;text-align:left;background:rgba(0,0,0,0.2);border-radius:6px;">
                             <thead>
@@ -3206,6 +3213,12 @@
                             </thead>
                             <tbody id="custCardItemsTableBody"></tbody>
                         </table>
+                    </div>
+
+                    <!-- Thanh xổ xuống mở rộng / thu gọn danh sách kiện hàng (Mặc định không xổ xuống, chỉ xem 3 đơn đầu) -->
+                    <div id="custCardItemsDropdownBar" onclick="toggleCustCardItemsDropdown()" style="display:none;margin-top:6px;padding:7px 12px;background:rgba(108,99,255,0.12);border:1px dashed rgba(108,99,255,0.45);border-radius:6px;cursor:pointer;align-items:center;justify-content:center;gap:6px;font-size:0.75rem;font-weight:600;color:var(--accent-light);transition:all 0.2s ease;" onmouseover="this.style.background='rgba(108,99,255,0.22)';this.style.borderColor='var(--accent)';" onmouseout="this.style.background='rgba(108,99,255,0.12)';this.style.borderColor='rgba(108,99,255,0.45)';">
+                        <span id="custCardItemsDropdownIcon">🔽</span>
+                        <span id="custCardItemsDropdownText">Xem chi tiết tất cả (còn lại 0 kiện hàng)</span>
                     </div>
 
                     <div id="custCardAIVerdict" style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(251,191,36,0.25);font-size:0.75rem;color:#cbd5e1;">
@@ -3788,6 +3801,26 @@
                         <div class="kpi-sub-text" id="kpiRecommendationText">Đang tải...</div>
                     </div>
                     <div class="kpi-footer-time">💡 Giờ vàng: 12:00-14:00 & sau 21:00</div>
+                </div>
+                <!-- KPI Card 4: Cảnh báo Ngập -->
+                <div class="kpi-card" id="kpiFloodCard" style="border-color: rgba(59,130,246,0.4);">
+                    <div>
+                        <div class="kpi-header"><span class="kpi-title" style="color:#3b82f6;">🌊 Nguy cơ Ngập</span><span
+                                class="kpi-badge badge-green" id="kpiFloodBadge">✅ An toàn</span></div>
+                        <div class="kpi-main-val" style="font-size:1.3rem;" id="kpiFloodMainText">Đang tải...</div>
+                        <div class="kpi-sub-text" id="kpiFloodDetails">Đang lấy dữ liệu dự báo mưa...</div>
+                    </div>
+                    <div class="kpi-footer-time" id="kpiFloodFooter">🌧️ Dữ liệu từ Open-Meteo</div>
+                </div>
+                <!-- KPI Card 5: Ngày Lễ Sắp Tới -->
+                <div class="kpi-card" id="kpiHolidayCard" style="border-color: rgba(245,158,11,0.4);">
+                    <div>
+                        <div class="kpi-header"><span class="kpi-title" style="color:#f59e0b;">📅 Ngày Lễ Sắp Tới</span><span
+                                class="kpi-badge badge-yellow" id="kpiHolidayBadge">--</span></div>
+                        <div class="kpi-main-val" style="font-size:1.2rem;" id="kpiHolidayMainText">Đang tải...</div>
+                        <div class="kpi-sub-text" id="kpiHolidayDetails">Lịch ngày lễ Việt Nam</div>
+                    </div>
+                    <div class="kpi-footer-time" id="kpiHolidayFooter">⚠️ Cần tránh lên lịch giao vào ngày lễ</div>
                 </div>
             </div>
             <div class="dashboard-charts-grid">
@@ -4682,6 +4715,7 @@
                         customer_address: addr,
                         customer_lat: lat ? parseFloat(lat) : null,
                         customer_lon: lon ? parseFloat(lon) : null,
+                        dataset_id: currentDatasetId,
                         total_quantity: qty,
                         total_weight_kg: wt,
                         time_window_start: '08:00',
@@ -4868,9 +4902,8 @@
             document.querySelectorAll('.res-content-view').forEach(v => v.style.display = 'none');
             if (btn) btn.classList.add('active');
 
-            if (tabName === 'kpis') { document.getElementById('resViewKpis').style.display = 'block'; document.querySelector('.b2b-kpi-grid').style.display = 'grid'; }
-            else if (tabName === 'split') { document.getElementById('resViewSplit').style.display = 'block'; document.querySelector('.b2b-kpi-grid').style.display = 'none'; }
-            else if (tabName === 'schedule') { document.getElementById('resViewSchedule').style.display = 'block'; document.querySelector('.b2b-kpi-grid').style.display = 'none'; }
+            if (tabName === 'split') { document.getElementById('resViewSplit').style.display = 'block'; }
+            else { document.getElementById('resViewSchedule').style.display = 'block'; }
         }
 
         function renderB2BResults(res) {
@@ -4991,7 +5024,6 @@
                         <div style="font-size:0.75rem;color:var(--text-dim);display:flex;gap:12px;">
                             <span>Tải: <strong>${rt.total_load_kg} / ${rt.capacity_kg} kg</strong> (${rt.load_percentage}%)</span>
                             <span>Cự ly: <strong>${rt.distance_km} km</strong></span>
-                            <span>Chi phí: <strong>${(rt.cost_vnd || 0).toLocaleString()} đ</strong></span>
                         </div>
                     </div>
                     <div style="font-size:0.78rem;color:var(--text);line-height:1.4;margin-top:8px;">
@@ -5659,6 +5691,31 @@
             applyCustomerFilter('all');
         }
 
+        let isCustCardItemsExpanded = false;
+
+        function toggleCustCardItemsDropdown() {
+            isCustCardItemsExpanded = !isCustCardItemsExpanded;
+            const extraRows = document.querySelectorAll('.cust-card-extra-row');
+            extraRows.forEach(r => {
+                r.style.display = isCustCardItemsExpanded ? 'table-row' : 'none';
+            });
+            const dropdownText = document.getElementById('custCardItemsDropdownText');
+            const dropdownIcon = document.getElementById('custCardItemsDropdownIcon');
+            const countBadge = document.getElementById('custCardVisibleCountBadge');
+            const totalExtra = extraRows.length;
+            const totalAll = totalExtra + 3;
+
+            if (isCustCardItemsExpanded) {
+                if (dropdownIcon) dropdownIcon.textContent = '🔼';
+                if (dropdownText) dropdownText.textContent = 'Thu gọn chi tiết (chỉ hiển thị 3 đơn đầu)';
+                if (countBadge) countBadge.textContent = `(Đã hiện tất cả ${totalAll} kiện)`;
+            } else {
+                if (dropdownIcon) dropdownIcon.textContent = '🔽';
+                if (dropdownText) dropdownText.textContent = `Xem chi tiết tất cả (còn lại ${totalExtra} kiện hàng)`;
+                if (countBadge) countBadge.textContent = `(Đang hiện 3/${totalAll} kiện)`;
+            }
+        }
+
         function applyCustomerFilter(customerName) {
             selectedPackingCustomer = customerName;
             const card = document.getElementById('packingCustomerDetailCard');
@@ -5710,6 +5767,7 @@
                     const tbody = document.getElementById('custCardItemsTableBody');
                     if (tbody) {
                         const sortedCustItems = [...custItems].sort((a, b) => (a.load_order || 0) - (b.load_order || 0));
+                        isCustCardItemsExpanded = false; // Mặc định không xổ xuống
                         let rowsHtml = '';
                         const truckD = packing3DTruckDims.depth || 300;
                         sortedCustItems.forEach((c, idx) => {
@@ -5729,8 +5787,12 @@
                             else if (c.is_fragile) typeBadge = '<span style="color:#f59e0b;font-weight:700;">🟡 Dễ vỡ</span>';
                             else if (c.requires_cold) typeBadge = '<span style="color:#3b82f6;font-weight:700;">🔵 Lạnh</span>';
 
+                            const isExtra = idx >= 3;
+                            const extraClass = isExtra ? 'cust-card-extra-row' : '';
+                            const extraStyle = isExtra ? 'display:none;' : '';
+
                             rowsHtml += `
-                                <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                                <tr class="${extraClass}" style="border-bottom:1px solid rgba(255,255,255,0.06);${extraStyle}">
                                     <td style="padding:6px 8px;font-weight:700;color:#fbbf24;">#${c.load_order || (idx + 1)}</td>
                                     <td style="padding:6px 8px;">${escapeHtml(c.item_name || c.sku)} ${typeBadge}</td>
                                     <td style="padding:6px 8px;color:#93c5fd;">${posTag}</td>
@@ -5741,6 +5803,22 @@
                             `;
                         });
                         tbody.innerHTML = rowsHtml;
+
+                        // Cập nhật thanh xổ xuống & badge đếm
+                        const dropdownBar = document.getElementById('custCardItemsDropdownBar');
+                        const dropdownIcon = document.getElementById('custCardItemsDropdownIcon');
+                        const dropdownText = document.getElementById('custCardItemsDropdownText');
+                        const countBadge = document.getElementById('custCardVisibleCountBadge');
+                        
+                        if (sortedCustItems.length > 3) {
+                            if (dropdownBar) dropdownBar.style.display = 'flex';
+                            if (dropdownIcon) dropdownIcon.textContent = '🔽';
+                            if (dropdownText) dropdownText.textContent = `Xem chi tiết tất cả (còn lại ${sortedCustItems.length - 3} kiện hàng)`;
+                            if (countBadge) countBadge.textContent = `(Đang hiện 3/${sortedCustItems.length} kiện)`;
+                        } else {
+                            if (dropdownBar) dropdownBar.style.display = 'none';
+                            if (countBadge) countBadge.textContent = `(${sortedCustItems.length} kiện)`;
+                        }
                     }
                 }
             }
@@ -6860,41 +6938,82 @@
             }
         }
 
+        let attachedChatFile = null;
+
+        function onChatFileSelected(inputEl) {
+            if (!inputEl.files || inputEl.files.length === 0) return;
+            attachedChatFile = inputEl.files[0];
+            document.getElementById('chatFileName').textContent = attachedChatFile.name;
+            document.getElementById('chatFilePreview').style.display = 'flex';
+        }
+
+        function removeAttachedChatFile() {
+            attachedChatFile = null;
+            document.getElementById('chatFileInput').value = '';
+            document.getElementById('chatFilePreview').style.display = 'none';
+        }
+
         async function sendChatMessage() {
             const input = document.getElementById('chatInput');
             const msg = input.value.trim();
-            if (!msg) return;
+            if (!msg && !attachedChatFile) return;
 
             input.value = '';
-            addUserChatMessage(msg);
+            
+            let displayMsg = msg;
+            if (attachedChatFile) {
+                displayMsg = `📎 Đính kèm: ${attachedChatFile.name}\n${msg}`;
+            }
+            addUserChatMessage(displayMsg || `📁 Gửi file: ${attachedChatFile.name}`);
 
-            // Typing indicator
             const typingId = addTypingIndicator();
+            
+            const fileToSend = attachedChatFile;
+            removeAttachedChatFile(); // Clear UI right away
 
             try {
-                const resp = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: msg,
-                        provider: currentChatEngine
-                    })
-                });
+                let resp;
+                if (fileToSend) {
+                    const formData = new FormData();
+                    formData.append('file', fileToSend);
+                    formData.append('dataset_id', currentDatasetId);
+                    formData.append('message', msg);
+                    
+                    resp = await fetch('/api/chat/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    resp = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: msg,
+                            provider: currentChatEngine
+                        })
+                    });
+                }
+                
+                if (!resp.ok) {
+                    const errData = await resp.json().catch(() => ({}));
+                    throw new Error(errData.detail || errData.error || `HTTP ${resp.status}`);
+                }
+                
                 const data = await resp.json();
                 removeTypingIndicator(typingId);
-
+                
                 if (data.reply) {
                     addBotChatMessage(data.reply, data.provider);
-                    // If order created, reload table
-                    if (data.action === 'order_created') {
+                    if (data.total_created > 0 || data.action === 'order_created') {
                         await loadB2BOrders();
                     }
                 } else {
-                    addBotChatMessage('⚠️ Không nhận được phản hồi từ AI Engine.');
+                    addBotChatMessage('⚠️ Không nhận được phản hồi từ máy chủ.');
                 }
             } catch (e) {
+                console.error('Chat error:', e);
                 removeTypingIndicator(typingId);
-                addBotChatMessage('⚠️ Lỗi kết nối tới máy chủ Chatbot.');
+                addBotChatMessage(`⚠️ Lỗi kết nối hoặc xử lý từ máy chủ: ${e.message || 'Vui lòng kiểm tra console'}`);
             }
         }
 
@@ -6902,7 +7021,8 @@
             const box = document.getElementById('chatMessages');
             const b = document.createElement('div');
             b.className = 'chat-bubble user';
-            b.textContent = text;
+            // handle multi-line text nicely
+            b.innerHTML = text.replace(/\n/g, '<br>');
             box.appendChild(b);
             box.scrollTop = box.scrollHeight;
         }
@@ -6943,37 +7063,6 @@
         function removeTypingIndicator(id) {
             const el = document.getElementById(id);
             if (el) el.remove();
-        }
-
-        async function uploadChatFile(inputEl) {
-            if (!inputEl.files || inputEl.files.length === 0) return;
-            const file = inputEl.files[0];
-            addUserChatMessage(`📁 Đang tải lên file: ${file.name}...`);
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const typingId = addTypingIndicator();
-            try {
-                const resp = await fetch('/api/chat/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await resp.json();
-                removeTypingIndicator(typingId);
-                if (data.reply) {
-                    addBotChatMessage(data.reply);
-                    if (data.total_created > 0) {
-                        await loadB2BOrders();
-                    }
-                } else {
-                    addBotChatMessage('⚠️ Không thể đọc dữ liệu file.');
-                }
-            } catch (e) {
-                removeTypingIndicator(typingId);
-                addBotChatMessage('⚠️ Lỗi gửi file lên server.');
-            }
-            inputEl.value = '';
         }
 
         // ═══════════════════════════════════════
@@ -8012,12 +8101,124 @@
         }
 
         // ═══════════════════════════════════════
+        // FLOOD RISK & HOLIDAY DASHBOARD
+        // ═══════════════════════════════════════
+        async function loadFloodRisk() {
+            try {
+                const r = await fetch('/api/flood-risk');
+                const d = await r.json();
+                if (!d.success) return;
+                
+                const mainEl = document.getElementById('kpiFloodMainText');
+                const detailEl = document.getElementById('kpiFloodDetails');
+                const badgeEl = document.getElementById('kpiFloodBadge');
+                const footerEl = document.getElementById('kpiFloodFooter');
+                const cardEl = document.getElementById('kpiFloodCard');
+                
+                const rain = d.rain_forecast;
+                
+                if (d.overall_status === 'danger') {
+                    badgeEl.className = 'kpi-badge badge-red';
+                    badgeEl.textContent = '🔴 Nguy hiểm';
+                    cardEl.style.borderColor = 'rgba(239,68,68,0.6)';
+                } else if (d.overall_status === 'warning') {
+                    badgeEl.className = 'kpi-badge badge-yellow';
+                    badgeEl.textContent = '🟡 Cảnh báo';
+                    cardEl.style.borderColor = 'rgba(245,158,11,0.5)';
+                } else {
+                    badgeEl.className = 'kpi-badge badge-green';
+                    badgeEl.textContent = '✅ An toàn';
+                    cardEl.style.borderColor = 'rgba(34,197,94,0.4)';
+                }
+                
+                mainEl.innerHTML = `${d.danger_count} <span style="font-size:0.8rem;color:var(--text-dim);">đường nguy hiểm</span> · ${d.warning_count} <span style="font-size:0.8rem;color:var(--text-dim);">cảnh báo</span>`;
+                
+                // Top 3 đường ngập
+                const topRoads = d.roads.filter(r => r.status !== 'safe').slice(0, 3);
+                if (topRoads.length > 0) {
+                    detailEl.innerHTML = topRoads.map(r => 
+                        `${r.status === 'danger' ? '🔴' : '🟡'} <strong>${r.name}</strong> (${r.district}) — ${r.risk_score}%`
+                    ).join('<br>');
+                } else {
+                    detailEl.textContent = 'Không có tuyến đường nào có nguy cơ ngập cao';
+                }
+                
+                footerEl.innerHTML = `🌧️ Mưa dự báo: max ${rain.max_hourly_mm}mm/h · 24h: ${rain.total_24h_mm}mm`;
+                
+                // Lưu data ngập vào global để route optimization dùng
+                window._floodRiskData = d;
+                
+            } catch (e) {
+                console.error('[Flood]', e);
+                document.getElementById('kpiFloodMainText').textContent = 'Không thể tải';
+            }
+        }
+        
+        async function loadHolidays() {
+            try {
+                const r = await fetch('/api/holidays');
+                const d = await r.json();
+                if (!d.success) return;
+                
+                const mainEl = document.getElementById('kpiHolidayMainText');
+                const detailEl = document.getElementById('kpiHolidayDetails');
+                const badgeEl = document.getElementById('kpiHolidayBadge');
+                const footerEl = document.getElementById('kpiHolidayFooter');
+                
+                const next = d.next_holiday;
+                if (next) {
+                    mainEl.innerHTML = `<strong>${next.name}</strong>`;
+                    
+                    if (next.days_until === 0) {
+                        badgeEl.className = 'kpi-badge badge-red';
+                        badgeEl.textContent = '🔴 Hôm nay!';
+                    } else if (next.days_until <= 7) {
+                        badgeEl.className = 'kpi-badge badge-yellow';
+                        badgeEl.textContent = `⏰ Còn ${next.days_until} ngày`;
+                    } else {
+                        badgeEl.className = 'kpi-badge badge-green';
+                        badgeEl.textContent = `📆 Còn ${next.days_until} ngày`;
+                    }
+                    
+                    // Hiện 3 ngày lễ gần nhất
+                    const upcoming = d.all_holidays.slice(0, 3);
+                    detailEl.innerHTML = upcoming.map(h => {
+                        let icon = '📅';
+                        if (h.impact === 'critical') icon = '🔴';
+                        else if (h.impact === 'high') icon = '🟠';
+                        else if (h.impact === 'medium') icon = '🟡';
+                        return `${icon} <strong>${h.name}</strong> — ${h.display_date} (${h.days_until} ngày)`;
+                    }).join('<br>');
+                    
+                    // Cảnh báo nếu sắp có ngày lễ ảnh hưởng lớn
+                    const urgent = d.upcoming.filter(h => h.impact === 'critical' || h.impact === 'high');
+                    if (urgent.length > 0) {
+                        footerEl.innerHTML = `⚠️ <strong style="color:var(--red);">${urgent[0].name}</strong> sắp tới — cần lên lịch giao sớm!`;
+                    } else {
+                        footerEl.textContent = '✅ Không có ngày lễ lớn trong 30 ngày tới';
+                    }
+                } else {
+                    mainEl.textContent = 'Không có dữ liệu';
+                }
+                
+                // Lưu data holiday vào global
+                window._holidayData = d;
+                
+            } catch (e) {
+                console.error('[Holiday]', e);
+                document.getElementById('kpiHolidayMainText').textContent = 'Không thể tải';
+            }
+        }
+
+        // ═══════════════════════════════════════
         // INITIALIZATION
         // ═══════════════════════════════════════
         initB2B();
         initMap();
         loadSavedLocations();
         loadVehicles();
+        loadFloodRisk();
+        loadHolidays();
     </script>
 </body>
 

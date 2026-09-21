@@ -18,7 +18,7 @@ from db import (
     save_order, save_order_item, get_orders, get_order_by_code, update_order,
     save_customer, get_customers, update_customer,
     save_chat_session, get_chat_session, update_chat_session,
-    _generate_order_code,
+    _generate_order_code, _get_conn, find_order_in_optimization_runs
 )
 
 
@@ -59,7 +59,7 @@ def call_gemini(prompt: str, system_prompt: str = "", api_key: str = None) -> st
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}
     }
 
-    resp = requests.post(url, json=payload, timeout=8)
+    resp = requests.post(url, json=payload, timeout=30)
     resp.raise_for_status()
     data = resp.json()
     return data['candidates'][0]['content']['parts'][0]['text']
@@ -82,6 +82,16 @@ def _parse_fallback_local(text: str) -> dict | None:
         'tắc đường', 'giao thông', 'cảm ơn', 'thanks', 'ok', 'được',
         'tạm biệt', 'bye'
     ]
+    # ── Intent Detection: Tra cứu đơn hàng / hỏi lịch giao ──
+    lookup_keywords = ['tra cứu', 'kiểm tra', 'tìm đơn', 'xem đơn', 'khi nào giao', 'ngày giao', 'giờ giao', 'lịch giao']
+    if any(kw in t_lower for kw in lookup_keywords):
+        q = t
+        for prefix in ['tra cứu đơn hàng', 'tra cứu đơn', 'kiểm tra đơn hàng', 'kiểm tra đơn', 'tìm đơn', 'xem đơn', 'lịch giao đơn', 'lịch giao', 'ngày giao', 'giờ giao']:
+            if prefix in t_lower:
+                q = t[t_lower.index(prefix) + len(prefix):].strip(" :?.,'\"")
+                break
+        return {"type": "lookup_order", "query": q or t}
+
     # Nếu tin nhắn chỉ là chào hỏi đơn giản (không chứa keyword đặt hàng)
     is_greeting = any(t_lower.startswith(g) or t_lower == g.strip() for g in greeting_patterns)
 
@@ -265,7 +275,7 @@ Trả về JSON:
   "missing_fields": ["customer_address", ...] (liệt kê các trường bắt buộc còn thiếu: customer_name, customer_address, items)
 }
 
-KHI NGƯỜI DÙNG MUỐN TRA CỨU ĐƠN HÀNG (VD: Tìm đơn MT, tra cứu đơn 6K4U00):
+KHI NGƯỜI DÙNG MUỐN TRA CỨU ĐƠN HÀNG (VD: Tìm đơn MT, tra cứu đơn 6K4U00, hỏi ngày và giờ giao dự kiến của đơn B2B-10932):
 Trả về JSON:
 {
   "type": "lookup_order",
@@ -292,26 +302,100 @@ Nếu người dùng chỉ chào hỏi hoặc hỏi chung, trả về JSON:
 
 
 def _format_delivery_info(order: dict) -> str:
-    """Format thông tin giao hàng dựa trên trạng thái đơn và lịch giao thực tế."""
+    """
+    Format chi tiết thông tin lịch giao, ngày & giờ giao dự kiến (ETA), 
+    khung giờ hẹn trước, xe vận chuyển và trạm giao.
+    """
+    order_code = order.get('order_code', '')
     status = order.get('status', 'pending')
-    scheduled = order.get('scheduled_delivery', '').strip() if order.get('scheduled_delivery') else ''
-    order_date = order.get('order_date', 'N/A')
+    scheduled = str(order.get('scheduled_delivery') or '').strip()
+    order_date = order.get('order_date') or 'N/A'
+    pref_date = order.get('delivery_date_preferred') or ''
+    tw_start = order.get('time_window_start') or ''
+    tw_end = order.get('time_window_end') or ''
+    
+    # Kiểm tra lịch tối ưu từ optimization runs (đã xếp xe và có ETA cụ thể)
+    opt = order.get('opt_schedule')
+    if not opt and order_code:
+        opt = find_order_in_optimization_runs(order_code)
+        
+    lines = []
+    
+    if opt:
+        d_date = opt.get('delivery_date') or pref_date or order_date
+        d_name = opt.get('day_name') or ''
+        date_display = f"{d_name}, {d_date}" if d_name and d_name not in str(d_date) else str(d_date)
+        eta = opt.get('eta') or '08:00'
+        tw = opt.get('time_window') or (f"{tw_start} - {tw_end}" if tw_start and tw_end else '')
+        v_name = opt.get('vehicle_name') or 'Xe tải chuyên dụng'
+        step = opt.get('stop_step')
+        waybill = opt.get('waybill_code') or ''
 
-    lines = (
-        f"• Ngày đặt hàng: {order_date}\n"
-    )
-
-    if status in ('scheduled', 'in_transit', 'delivered') and scheduled:
-        lines += f"• 📅 Lịch giao: {scheduled}\n"
-        lines += f"• ✅ Đã lên lịch giao\n"
-    elif status == 'optimizing':
-        lines += f"• ⏳ Đang tối ưu lịch giao...\n"
-    elif status == 'confirmed':
-        lines += f"• 📋 Đã xác nhận, chờ lên lịch\n"
+        lines.append(f"• 📅 **Ngày giao dự kiến:** {date_display}")
+        lines.append(f"• ⏰ **Giờ giao dự kiến (ETA):** {eta}")
+        if tw:
+            lines.append(f"• 🕐 **Khung giờ hẹn giao:** {tw}")
+        lines.append(f"• 🚛 **Xe vận chuyển:** {v_name}")
+        if step is not None:
+            lines.append(f"• 📍 **Thứ tự dừng:** Trạm #{step}")
+        if waybill:
+            lines.append(f"• 🏷️ **Mã chuyến / Vận đơn:** `{waybill}`")
+        lines.append("• ✅ **Trạng thái:** Đã xếp xe & lên lịch giao tối ưu")
+        
+    elif scheduled:
+        lines.append(f"• 📅 **Ngày & Giờ giao dự kiến:** {scheduled}")
+        if tw_start and tw_end:
+            lines.append(f"• 🕐 **Khung giờ hẹn giao:** {tw_start} - {tw_end}")
+        lines.append("• ✅ **Trạng thái:** Đã lên lịch giao hàng")
+        
+    elif pref_date or (tw_start and tw_end):
+        d_display = pref_date if pref_date else order_date
+        lines.append(f"• 📅 **Ngày giao dự kiến:** {d_display}")
+        if tw_start and tw_end:
+            lines.append(f"• ⏰ **Khung giờ hẹn giao:** {tw_start} - {tw_end}")
+        elif tw_start or tw_end:
+            lines.append(f"• ⏰ **Khung giờ hẹn giao:** {tw_start or ''} - {tw_end or ''}")
+            
+        if status == 'optimizing':
+            lines.append("• ⏳ **Trạng thái:** Đang chạy thuật toán tối ưu xếp chuyến xe...")
+        elif status == 'confirmed':
+            lines.append("• 📋 **Trạng thái:** Đã xác nhận khung giờ hẹn, chờ xuất chuyến xe")
+        else:
+            lines.append("• 📋 **Trạng thái:** Đã có khung giờ hẹn giao, chờ xếp chuyến")
     else:
-        lines += f"• 🕐 Chưa lên lịch giao\n"
+        lines.append(f"• 📅 **Ngày đặt hàng:** {order_date}")
+        if status == 'optimizing':
+            lines.append("• ⏳ **Trạng thái:** Đang chạy thuật toán tối ưu xếp xe...")
+        elif status == 'confirmed':
+            lines.append("• 📋 **Trạng thái:** Đã xác nhận đơn, chờ điều phối phân tuyến")
+        else:
+            lines.append("• 🕐 **Trạng thái:** Chưa lên lịch giao / Chờ điều phối")
 
-    return lines
+    return "\n".join(lines)
+
+
+def _format_order_card(order: dict) -> str:
+    """Format thẻ hiển thị chi tiết đơn hàng cho chatbot."""
+    delivery_info = _format_delivery_info(order)
+    cust_name = order.get('customer_name') or 'N/A'
+    cust_phone = order.get('customer_phone') or ''
+    cust_addr = order.get('customer_address') or 'N/A'
+    items = order.get('item_summary') or ''
+    qty = order.get('total_quantity', 0)
+    weight = order.get('total_weight_kg', 0)
+    
+    phone_str = f" ({cust_phone})" if cust_phone else ""
+    items_str = f"\n• 📦 **Sản phẩm:** {items}" if items else ""
+    weight_str = f" ({weight} kg)" if weight else ""
+    
+    return (
+        f"📦 **Thông tin đơn hàng `{order['order_code']}`**:\n"
+        f"• 👤 **Khách hàng:** {cust_name}{phone_str}\n"
+        f"• 📍 **Địa chỉ giao:** {cust_addr}\n"
+        f"• 📊 **Số lượng:** {qty} kiện/thùng{weight_str}"
+        f"{items_str}\n"
+        f"{delivery_info}"
+    )
 
 
 def process_user_chat(message: str, session_id: str = "default",
@@ -321,37 +405,33 @@ def process_user_chat(message: str, session_id: str = "default",
     Xử lý tin nhắn của người dùng trong Chatbot.
     Tự động lưu lịch sử hội thoại, tạo đơn vào DB khi đủ thông tin.
     """
-    # 1. Tra cứu xem tin nhắn có chứa mã đơn 6 ký tự để tra cứu không (VD: tra cứu đơn A3K9X2)
-    words = [w.strip(".,;:?!'\"") for w in message.split()]
-    for w in words:
-        if len(w) == 6 and w.isalnum():
-            order_found = get_order_by_code(w)
-            if order_found:
-                delivery_info = _format_delivery_info(order_found)
-                resp_text = (
-                    f"📦 **Thông tin đơn hàng `{order_found['order_code']}`**:\n"
-                    f"• **Khách hàng:** {order_found.get('customer_name') or 'N/A'}\n"
-                    f"• **Địa chỉ:** {order_found.get('customer_address') or 'N/A'}\n"
-                    f"• **Số lượng:** {order_found.get('total_quantity', 0)} kiện/thùng\n"
-                    f"• **Trạng thái:** {order_found.get('status', 'pending')}\n"
-                    f"{delivery_info}"
-                )
-                return {
-                    "success": True,
-                    "reply": resp_text,
-                    "provider": "Local DB",
-                    "action": "order_lookup",
-                    "order": order_found
-                }
+    # 1. Tra cứu xem tin nhắn có chứa mã đơn để tra cứu trực tiếp không (VD: B2B-10932, 2O5WZ0, UDS-0001, v.v.)
+    candidates = re.findall(r'\b[A-Za-z0-9][A-Za-z0-9\-_]{3,24}\b', message)
+    common_words = {"tra", "cuu", "don", "hang", "ngay", "gio", "giao", "khi", "nao", "xem", "cho", "toi", "biet", "chua", "chuyen", "khung"}
+    for cand in candidates:
+        if cand.lower() in common_words:
+            continue
+        order_found = get_order_by_code(cand)
+        if order_found:
+            return {
+                "success": True,
+                "reply": _format_order_card(order_found),
+                "provider": "Local DB",
+                "action": "order_lookup",
+                "order": order_found
+            }
 
     # 2. Gọi AI phân tích
     raw_reply = None
     parsed = {}
     provider_used = "Local Parser"
     try:
+        # Inject historical context vào system prompt
+        historical = _get_historical_context()
+        enriched_prompt = SYSTEM_ORDER_PROMPT + historical
         raw_reply, provider_used = call_llm(
             prompt=f"Tin nhắn người dùng: \"{message}\"",
-            system_prompt=SYSTEM_ORDER_PROMPT,
+            system_prompt=enriched_prompt,
             preferred_provider=preferred_provider,
             gemini_key=gemini_key,
             openrouter_key=openrouter_key
@@ -514,29 +594,41 @@ def process_user_chat(message: str, session_id: str = "default",
         if not query:
             return {"success": True, "reply": "Vui lòng cung cấp mã đơn hoặc tên khách hàng cần tra cứu.", "provider": provider_used, "action": "chat"}
         
+        # Thử tìm chính xác theo mã đơn trước
+        exact_order = get_order_by_code(query)
+        if exact_order:
+            return {
+                "success": True,
+                "reply": _format_order_card(exact_order),
+                "provider": provider_used,
+                "action": "order_lookup",
+                "order": exact_order
+            }
+
+        q_lower = query.lower()
+        q_cleaned = re.sub(r'^(tiệm|quán|cửa hàng|đại lý|nhà thuốc|tạp hóa)\s+', '', q_lower).strip()
         all_orders = get_orders()
         found = []
         for o in all_orders:
-            if query.lower() in o.get("order_code", "").lower() or query.lower() in o.get("customer_name", "").lower():
+            c_name = (o.get("customer_name") or "").lower()
+            o_code = (o.get("order_code") or "").lower()
+            c_addr = (o.get("customer_address") or "").lower()
+            if (q_lower in o_code or 
+                q_lower in c_name or 
+                (c_name and c_name in q_lower) or 
+                (q_cleaned and (q_cleaned in c_name or q_cleaned in c_addr))):
                 found.append(o)
         
         if not found:
             return {"success": True, "reply": f"Không tìm thấy đơn hàng nào khớp với '{query}'.", "provider": provider_used, "action": "chat"}
         
-        reply = f"🔍 **Đã tìm thấy {len(found)} đơn hàng khớp với '{query}':**\n"
+        reply = f"🔍 **Đã tìm thấy {len(found)} đơn hàng khớp với '{query}':**\n\n"
         for o in found[:5]: # Chỉ hiện 5 đơn gần nhất
-            delivery_info = _format_delivery_info(o)
-            reply += (
-                f"\n📦 **Mã đơn: `{o['order_code']}`**\n"
-                f"• Khách hàng: {o.get('customer_name', 'N/A')}\n"
-                f"• Số lượng: {o.get('total_quantity', 0)} thùng\n"
-                f"• Trạng thái: {o.get('status', 'pending')}\n"
-                f"{delivery_info}"
-            )
+            reply += _format_order_card(o) + "\n\n"
         
         return {
             "success": True,
-            "reply": reply,
+            "reply": reply.strip(),
             "provider": provider_used,
             "action": "order_lookup",
             "order": found[0]
@@ -590,60 +682,300 @@ def process_user_chat(message: str, session_id: str = "default",
     }
 
 
-def process_uploaded_file(content_bytes: bytes, filename: str) -> dict:
-    """Đọc file Excel/CSV/Text upload, bóc tách và tạo danh sách đơn hàng."""
-    created_orders = []
-    lines = []
-    
-    # Thử decode text/csv
+import pandas as pd
+import io
+
+def _load_historical_context() -> str:
+    """Load mẫu dữ liệu lịch sử từ uds-orders-aug2024.csv để inject vào AI context."""
+    csv_path = Path(__file__).parent.parent / "uds-orders-aug2024.csv"
+    if not csv_path.exists():
+        return ""
     try:
-        text = content_bytes.decode('utf-8', errors='ignore')
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-    except Exception:
-        pass
+        df = pd.read_csv(csv_path, nrows=60)
+        # Tóm tắt thống kê
+        total_rows = len(pd.read_csv(csv_path, usecols=[0]))
+        top_items = df['package_name'].value_counts().head(8).to_dict()
+        avg_weight = df['weight'].mean()
+        avg_distance = df['shippingDistance'].mean()
+        
+        # Lấy danh sách các địa chỉ phổ biến
+        top_receivers = df['receiverAddress'].value_counts().head(5).index.tolist()
+        top_senders = df['senderAddress'].value_counts().head(5).index.tolist()
+        
+        context = (
+            f"\n\n=== DỮ LIỆU LỊCH SỬ GIAO HÀNG TPHCM (tham khảo) ===\n"
+            f"Tổng đơn lịch sử: {total_rows} đơn\n"
+            f"Trọng lượng trung bình: {avg_weight:.1f} kg\n"
+            f"Khoảng cách giao trung bình: {avg_distance:.0f} m\n"
+            f"Loại hàng phổ biến: {json.dumps(top_items, ensure_ascii=False)}\n"
+            f"Điểm gửi thường gặp: {'; '.join(top_senders[:3])}\n"
+            f"Điểm nhận thường gặp: {'; '.join(top_receivers[:3])}\n"
+            f"=== Sử dụng thông tin trên để ước lượng trọng lượng, khoảng cách khi thiếu dữ liệu ===\n"
+        )
+        return context
+    except Exception as e:
+        print(f"[Chatbot] Load historical context failed: {e}")
+        return ""
 
-    if not lines:
-        return {"success": False, "error": "Không thể đọc nội dung file."}
 
-    # Bỏ dòng header nếu có
-    if len(lines) > 1 and any(h in lines[0].lower() for h in ["tên", "khách", "địa chỉ", "name", "address"]):
-        data_lines = lines[1:]
+# Cache historical context (load 1 lần duy nhất)
+_HISTORICAL_CONTEXT = None
+
+def _get_historical_context() -> str:
+    global _HISTORICAL_CONTEXT
+    if _HISTORICAL_CONTEXT is None:
+        _HISTORICAL_CONTEXT = _load_historical_context()
+    return _HISTORICAL_CONTEXT
+
+
+def _detect_upload_intent(user_message: str) -> str:
+    """Phát hiện ý định người dùng khi upload file.
+    Returns: 'analyze' | 'create'
+    """
+    msg = user_message.lower().strip()
+    
+    # Ý định tạo đơn rõ ràng
+    create_keywords = [
+        "tạo đơn", "nạp data", "nạp dữ liệu", "import", "nhập đơn",
+        "thêm đơn", "tạo data", "làm data", "chuyển thành đơn",
+        "tạo đơn mẫu", "tạo đơn từ", "nạp vào", "add order",
+        "create order", "tạo hàng loạt"
+    ]
+    for kw in create_keywords:
+        if kw in msg:
+            return "create"
+    
+    # Mặc định: phân tích (an toàn, không tạo đơn)
+    return "analyze"
+
+
+def process_uploaded_file(content_bytes: bytes, filename: str, dataset_id: int = 1, user_message: str = "") -> dict:
+    """Đọc file Excel/CSV/Text upload. Hỗ trợ 2 chế độ:
+    - analyze: Phân tích nội dung file, trả summary cho người dùng
+    - create: Tạo đơn hàng từ dữ liệu file
+    """
+    # ═══════════════════════════════════════════════════
+    # 1. PARSE FILE
+    # ═══════════════════════════════════════════════════
+    df = None
+    raw_text = None
+    
+    try:
+        if filename.lower().endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(content_bytes))
+        elif filename.lower().endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content_bytes))
+        else:
+            raw_text = content_bytes.decode('utf-8', errors='ignore')
+    except Exception as e:
+        try:
+            raw_text = content_bytes.decode('utf-8', errors='ignore')
+        except Exception:
+            return {"success": False, "error": f"Không thể đọc file: {str(e)}", "reply": f"⚠️ Không thể đọc file `{filename}`: {str(e)}"}
+
+    if df is not None and df.empty:
+        return {"success": False, "error": "File trống.", "reply": f"⚠️ File `{filename}` không chứa dữ liệu nào."}
+    if raw_text is not None and not raw_text.strip():
+        return {"success": False, "error": "File trống.", "reply": f"⚠️ File `{filename}` không chứa dữ liệu nào."}
+
+    # ═══════════════════════════════════════════════════
+    # 2. TẠO SUMMARY CỦA FILE
+    # ═══════════════════════════════════════════════════
+    if df is not None:
+        total_rows = len(df)
+        columns = list(df.columns)
+        # Bỏ các cột quá dài (image URL, ID) trong preview để prompt gọn gàng và AI phản hồi nhanh
+        clean_cols = [c for c in columns if c.lower() not in ['image', 'id', 'shipper']]
+        sample_df = df[clean_cols].head(3) if clean_cols else df.head(3)
+        sample_rows = sample_df.to_string(index=False)
+        
+        # Phân tích độ đầy đủ và các cột bị khuyết (null)
+        col_analysis = []
+        missing_fields = []
+        for col in columns:
+            non_null = int(df[col].notna().sum())
+            pct = 100 * non_null // total_rows
+            col_analysis.append(f"  - `{col}`: {non_null}/{total_rows} giá trị ({pct}%)")
+            if non_null < total_rows:
+                missing_fields.append(f"`{col}` (thiếu {total_rows - non_null} dòng)")
+        
+        missing_str = ", ".join(missing_fields) if missing_fields else "Không có cột nào bị thiếu giá trị."
+        
+        file_summary = (
+            f"📊 **Tổng quan file `{filename}`:**\n"
+            f"• Số dòng: **{total_rows}** | Số cột: **{len(columns)}**\n"
+            f"• Các cột: `{'`, `'.join(columns)}`\n\n"
+            f"⚠️ **Các cột bị thiếu giá trị trong file:** {missing_str}\n\n"
+            f"📋 **Chi tiết độ đầy đủ từng cột:**\n" + "\n".join(col_analysis) + "\n\n"
+            f"📝 **Mẫu 3 dòng dữ liệu:**\n```\n{sample_rows}\n```"
+        )
     else:
-        data_lines = lines
+        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+        total_rows = len(lines)
+        sample = "\n".join(lines[:5])
+        file_summary = (
+            f"📄 **File `{filename}` (text):**\n"
+            f"• Số dòng: **{total_rows}**\n\n"
+            f"📝 **Mẫu 5 dòng đầu:**\n```\n{sample}\n```"
+        )
 
-    for idx, line in enumerate(data_lines[:20]):  # Tối đa 20 dòng mỗi file
-        parsed = _parse_fallback_local(line)
-        if parsed:
-            cust_name = parsed["customer_name"]
-            addr = parsed["customer_address"]
-            qty = parsed["items"][0]["quantity"]
+    # ═══════════════════════════════════════════════════
+    # 3. PHÁT HIỆN Ý ĐỊNH
+    # ═══════════════════════════════════════════════════
+    intent = _detect_upload_intent(user_message)
+    
+    # ═══════════════════════════════════════════════════
+    # CHẾ ĐỘ ANALYZE: Chỉ phân tích, hỏi lại người dùng
+    # ═══════════════════════════════════════════════════
+    if intent == "analyze":
+        # Gửi summary + user_message cho AI phân tích thông minh
+        historical = _get_historical_context() if "uds-orders" not in filename.lower() else ""
+        ai_prompt = (
+            f"Người dùng upload file `{filename}` và hỏi: \"{user_message}\"\n\n"
+            f"{file_summary}\n\n"
+            f"Yêu cầu:\n"
+            f"1. Trả lời trực tiếp câu hỏi của người dùng bằng tiếng Việt.\n"
+            f"2. Nêu rõ những thông tin đang BỊ THIẾU trong file (các ô trống/null).\n"
+            f"3. Đối với bài toán điều phối giao hàng (FLEX-VRP Logistics), chỉ rõ file này còn THIẾU những thông tin nghiệp vụ quan trọng nào "
+            f"(ví dụ: tên người nhận, số điện thoại người nhận, thể tích/kích thước 3D kiện hàng, khung giờ nhận hàng chuẩn hóa [time window]).\n"
+            f"4. Đề xuất giải pháp bổ sung (ví dụ: tự sinh đơn mẫu với thông số giả lập hợp lý, người dùng bổ sung, hoặc tự điền giá trị mặc định).\n"
+            f"5. Hướng dẫn người dùng nhắn lệnh tiếp theo (ví dụ: 'tạo đơn từ file này', 'tạo đơn mẫu').\n"
+            f"{historical}"
+        )
+        system = (
+            "Bạn là Trợ lý AI Điều phối Logistics B2B FLEX-VRP. "
+            "Phân tích chuyên sâu, rõ ràng, định dạng markdown đẹp mắt, dùng icon trực quan."
+        )
+        
+        try:
+            ai_reply, provider = call_llm(ai_prompt, system, preferred_provider="gemini")
+        except Exception as e:
+            print(f"[Upload] AI Analysis failed: {e}")
+            ai_reply = file_summary
+            provider = "Local"
+        
+        return {
+            "success": True,
+            "filename": filename,
+            "total_created": 0,
+            "reply": ai_reply,
+            "provider": provider,
+            "action": "file_analyzed",
+            "file_info": {
+                "total_rows": total_rows,
+                "columns": columns if df is not None else [],
+            }
+        }
+    
+    # ═══════════════════════════════════════════════════
+    # CHẾ ĐỘ CREATE: Tạo đơn hàng từ file
+    # ═══════════════════════════════════════════════════
+    created_orders = []
+    
+    # Chuẩn bị dữ liệu dòng
+    if df is not None:
+        work_df = df.head(50)  # Giới hạn 50 đơn/lần
+        lines = work_df.apply(lambda row: ', '.join([str(val) for val in row if pd.notna(val)]), axis=1).tolist()
+    else:
+        lines = [l.strip() for l in raw_text.splitlines() if l.strip()][:50]
 
-            # Lưu customer
-            cid = save_customer(cust_name, addr, 10.77 + (idx * 0.005), 106.69 + (idx * 0.005))
-            code = _generate_order_code()
-            ord_row = save_order(
-                customer_id=cid,
-                order_code=code,
-                status="confirmed",
-                total_quantity=qty,
-                total_weight_kg=qty * 5.0,
-                time_window_start="08:00",
-                time_window_end="17:00",
-                source="file_upload"
+    # Gọi AI Batch Processing
+    user_context = f"\nYêu cầu bổ sung của người dùng: {user_message}" if user_message else ""
+    historical = _get_historical_context()
+    prompt = (
+        f"Dưới đây là {len(lines)} dòng dữ liệu từ file upload. Hãy phân tích và trích xuất từng dòng thành một đơn hàng. "
+        "Nếu thiếu trọng lượng (weight_kg) hoặc kích thước, hãy TỰ ĐỘNG ƯỚC LƯỢNG dựa trên 'tên hàng' và 'số lượng'. "
+        "Ví dụ: 1 thùng mì tôm ~ 2kg, 1 lốc sữa ~ 1.5kg, 1 tủ lạnh ~ 60kg (is_heavy=1). "
+        "Nếu file có cột senderAddress/receiverAddress, lấy receiverAddress làm customer_address. "
+        "Nếu file có cột package_name, lấy làm tên hàng. Nếu có cột weight, lấy làm weight_kg. "
+        "Trả về định dạng JSON array chứa các object với keys: "
+        "'customer_name', 'customer_address' (nếu không có mặc định TP.HCM), "
+        "'items': [{'name', 'quantity', 'weight_kg', 'width_cm', 'depth_cm', 'height_cm', 'is_heavy', 'is_fragile', 'requires_cold'}].\n\n"
+        f"Dữ liệu:\n" + "\n".join(lines) + user_context + historical
+    )
+    
+    system_prompt = "Bạn là AI Logistics. Output phải là một JSON array hợp lệ. KHÔNG markdown, KHÔNG text giải thích."
+    
+    try:
+        import re
+        resp, _ = call_llm(prompt, system_prompt, preferred_provider="gemini")
+        match = re.search(r'\[.*\]', resp, re.DOTALL)
+        if match:
+            orders_data = json.loads(match.group(0))
+        else:
+            orders_data = json.loads(resp)
+    except Exception as e:
+        print(f"[Upload] AI Batch Parsing Failed: {e}")
+        orders_data = []
+        for idx, line in enumerate(lines):
+            parsed = _parse_fallback_local(line)
+            if parsed:
+                orders_data.append(parsed)
+
+    for idx, parsed in enumerate(orders_data):
+        cust_name = parsed.get("customer_name") or f"Khách hàng {idx+1}"
+        addr = parsed.get("customer_address") or "TP. Hồ Chí Minh"
+        
+        items = parsed.get("items", [])
+        if not items:
+            continue
+            
+        item_data = items[0]
+        qty = item_data.get("quantity")
+        if qty is None: qty = 1
+        item_name = item_data.get("name") or "Hàng hóa"
+        
+        weight_kg = item_data.get("weight_kg")
+        if weight_kg is None: weight_kg = qty * 5.0
+        
+        is_heavy = item_data.get("is_heavy")
+        if is_heavy is None: is_heavy = 1 if weight_kg > 30 else 0
+        is_fragile = item_data.get("is_fragile") or 0
+        requires_cold = item_data.get("requires_cold") or 0
+
+        # Lưu customer
+        cid = save_customer(cust_name, addr, 10.77 + (idx * 0.005), 106.69 + (idx * 0.005))
+        code = _generate_order_code()
+        ord_row = save_order(
+            customer_id=cid,
+            order_code=code,
+            dataset_id=dataset_id,
+            status="confirmed",
+            total_quantity=qty,
+            total_weight_kg=weight_kg,
+            time_window_start="08:00",
+            time_window_end="17:00",
+            source="file_upload"
+        )
+        
+        # Lưu items
+        conn = _get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO order_items (order_id, product_name, quantity, weight_per_unit_kg, "
+                "width_cm, depth_cm, height_cm, is_heavy, is_fragile, requires_cold) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ord_row["id"], item_name, qty, round(weight_kg / max(1, qty), 2),
+                 item_data.get("width_cm") or 0, item_data.get("depth_cm") or 0, item_data.get("height_cm") or 0,
+                 is_heavy, is_fragile, requires_cold)
             )
-            save_order_item(ord_row["id"], parsed["items"][0]["name"], qty, 5.0, 0.04)
-            created_orders.append({
-                "order_code": code,
-                "customer_name": cust_name,
-                "address": addr,
-                "quantity": qty
-            })
+            conn.commit()
+        finally:
+            conn.close()
+            
+        created_orders.append({
+            "order_code": code,
+            "customer_name": cust_name,
+            "address": addr,
+            "quantity": qty
+        })
 
     return {
         "success": True,
         "filename": filename,
         "total_created": len(created_orders),
         "orders": created_orders,
-        "reply": f"📁 Đã xử lý file **`{filename}`** và tạo thành công **{len(created_orders)} đơn hàng** mới vào hệ thống!"
+        "reply": f"📁 Đã xử lý file **`{filename}`** và tạo thành công **{len(created_orders)} đơn hàng** vào bảng dữ liệu hiện tại!"
     }
+
 

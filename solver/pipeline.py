@@ -20,6 +20,7 @@ from db import (
     create_optimization_run, update_optimization_progress,
     complete_optimization_run, get_optimization_run,
     get_vehicle_cargo_spec, get_order_items, get_or_estimate_cargo_dimensions, delete_order,
+    _get_conn,
 )
 from dinic_flow import (
     split_orders, consolidate_small_orders,
@@ -559,7 +560,7 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
         "distant_orders_count": distant_orders_count,
         "depot": {"name": depot_name, "lat": depot_lat, "lon": depot_lon},
         "kpis": {
-            "total_orders": sum(day["total_day_orders"] for day in schedule_by_day),
+            "total_orders": len(orders_info),
             "total_deliveries": len(assignments),
             "vehicles_used": opt_vehicles_used,
             "total_distance_km": opt_distance_km,
@@ -604,6 +605,50 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
 
     update_optimization_progress(run_id, 90, "💾 Đang lưu lịch vận chuyển vào cơ sở dữ liệu...")
     time.sleep(0.15)
+    
+    # Lưu vào bảng delivery_schedule & cập nhật orders.status = 'scheduled'
+    try:
+        conn = _get_conn()
+        for day in schedule_by_day:
+            d_date = day.get("date")
+            p_idx = day.get("day_index", 1)
+            for rt in day.get("routes", []):
+                v_id = rt.get("vehicle_id")
+                for st in rt.get("merged_stops", []):
+                    if st.get("type") != "customer":
+                        continue
+                    eta_val = st.get("eta") or st.get("etd")
+                    st_seq = st.get("step")
+                    delivs = st.get("deliveries") or []
+                    if not delivs and st.get("order_code"):
+                        delivs = [{
+                            "order_code": st.get("order_code"),
+                            "quantity": st.get("quantity", 0),
+                            "weight_kg": st.get("weight_kg", 0)
+                        }]
+                    for d in delivs:
+                        oc = d.get("order_code")
+                        if not oc:
+                            continue
+                        ord_row = conn.execute("SELECT id FROM orders WHERE order_code=?", (oc,)).fetchone()
+                        if ord_row:
+                            o_id = ord_row["id"]
+                            conn.execute("DELETE FROM delivery_schedule WHERE order_id=?", (o_id,))
+                            conn.execute(
+                                """INSERT INTO delivery_schedule 
+                                   (order_id, vehicle_id, delivery_date, period_index, assigned_quantity, assigned_weight_kg, eta, stop_sequence, status)
+                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned')""",
+                                (o_id, v_id, d_date, p_idx, d.get("quantity", 0), d.get("weight_kg", 0), eta_val, st_seq)
+                            )
+                            conn.execute(
+                                "UPDATE orders SET status='scheduled', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                                (o_id,)
+                            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[Pipeline] Warning: failed to save delivery_schedule: {e}")
+
     result_json = json.dumps(result, ensure_ascii=False)
     update_optimization_progress(run_id, 95, "📋 Hoàn thiện báo cáo kết quả...")
     time.sleep(0.15)

@@ -139,6 +139,16 @@ def init_db():
             -- PHASE II: B2B Order Management Tables
             -- ═══════════════════════════════════════
 
+            -- Bảng quản lý datasets (danh sách đơn hàng)
+            CREATE TABLE IF NOT EXISTS datasets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT 'Bảng mặc định',
+                description TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Khách hàng (tiệm tạp hóa / retailer)
             CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,6 +168,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 order_code TEXT NOT NULL UNIQUE,
                 customer_id INTEGER,
+                dataset_id INTEGER DEFAULT 1,
                 status TEXT NOT NULL DEFAULT 'pending'
                     CHECK(status IN ('pending','incomplete','confirmed','optimizing','scheduled','in_transit','delivered','cancelled')),
                 is_urgent INTEGER DEFAULT 0,
@@ -172,7 +183,8 @@ def init_db():
                 source TEXT DEFAULT 'manual',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers(id)
+                FOREIGN KEY (customer_id) REFERENCES customers(id),
+                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE
             );
 
             -- Chi tiết đơn hàng (sản phẩm trong đơn)
@@ -334,6 +346,19 @@ def init_db():
                 conn.commit()
             except Exception:
                 pass
+
+        # Migration Phase 2: Multi-Dataset
+        try:
+            conn.execute("ALTER TABLE orders ADD COLUMN dataset_id INTEGER DEFAULT 1")
+            conn.commit()
+        except Exception:
+            pass
+            
+        try:
+            conn.execute("INSERT OR IGNORE INTO datasets (id, name, is_active) VALUES (1, 'Bảng mặc định', 1)")
+            conn.commit()
+        except Exception:
+            pass
 
         # Seed events nếu table trống
         count = conn.execute("SELECT COUNT(*) FROM traffic_events").fetchone()[0]
@@ -1276,6 +1301,67 @@ def update_customer(customer_id: int, **kwargs) -> dict | None:
 
 
 # ═══════════════════════════════════════
+# PHASE II: DATASETS CRUD
+# ═══════════════════════════════════════
+
+def get_datasets() -> list[dict]:
+    conn = _get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM datasets ORDER BY id ASC").fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+def create_dataset(name: str) -> dict:
+    conn = _get_conn()
+    try:
+        cur = conn.execute("INSERT INTO datasets (name) VALUES (?)", (name,))
+        conn.commit()
+        row = conn.execute("SELECT * FROM datasets WHERE id=?", (cur.lastrowid,)).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+def rename_dataset(dataset_id: int, new_name: str) -> bool:
+    conn = _get_conn()
+    try:
+        conn.execute("UPDATE datasets SET name=? WHERE id=?", (new_name, dataset_id))
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+def delete_dataset(dataset_id: int) -> bool:
+    # Không cho xóa dataset 1 (mặc định)
+    if dataset_id == 1:
+        return False
+    conn = _get_conn()
+    try:
+        # FK ON DELETE CASCADE sẽ xóa orders
+        conn.execute("DELETE FROM datasets WHERE id=?", (dataset_id,))
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+def set_active_dataset(dataset_id: int) -> bool:
+    conn = _get_conn()
+    try:
+        conn.execute("UPDATE datasets SET is_active=0")
+        conn.execute("UPDATE datasets SET is_active=1 WHERE id=?", (dataset_id,))
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════
 # PHASE II: ORDERS CRUD (mã 6 ký tự)
 # ═══════════════════════════════════════
 
@@ -1299,6 +1385,7 @@ def _generate_order_code() -> str:
 
 
 def save_order(customer_id: int = None, order_code: str = None,
+               dataset_id: int = 1,
                status: str = "pending", is_urgent: int = 0, total_quantity: int = 0,
                total_weight_kg: float = 0, total_volume_cbm: float = 0,
                time_window_start: str = None, time_window_end: str = None,
@@ -1318,11 +1405,11 @@ def save_order(customer_id: int = None, order_code: str = None,
     conn = _get_conn()
     try:
         cur = conn.execute(
-            """INSERT INTO orders (order_code, customer_id, status, is_urgent, total_quantity,
+            """INSERT INTO orders (order_code, customer_id, dataset_id, status, is_urgent, total_quantity,
                total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
                delivery_date_preferred, order_date, notes, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (order_code, customer_id, status, is_urgent, total_quantity,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (order_code, customer_id, dataset_id, status, is_urgent, total_quantity,
              total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
              delivery_date_preferred, order_date, notes, source)
         )
@@ -1333,7 +1420,7 @@ def save_order(customer_id: int = None, order_code: str = None,
         conn.close()
 
 
-def get_orders(status: str = None) -> list[dict]:
+def get_orders(status: str = None, dataset_id: int = None) -> list[dict]:
     conn = _get_conn()
     try:
         order_date_expr = "COALESCE(o.order_date, substr(o.created_at, 1, 16))"
@@ -1349,34 +1436,109 @@ def get_orders(status: str = None) -> list[dict]:
             f"o.delivery_date_preferred, "
             f"{schedule_sub} AS scheduled_delivery, "
             "c.name as customer_name, c.address as customer_address, "
+            "c.phone as customer_phone, "
             "c.lat as customer_lat, c.lon as customer_lon, "
             "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') "
             "FROM order_items WHERE order_id=o.id), '') AS item_summary "
             "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
+            "WHERE 1=1 "
         )
+        params = []
         if status:
-            rows = conn.execute(
-                base_select + f"WHERE o.status=? ORDER BY {sort_expr} ASC", (status,)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                base_select + f"ORDER BY {sort_expr} ASC"
-            ).fetchall()
+            base_select += " AND o.status=?"
+            params.append(status)
+        if dataset_id is not None:
+            base_select += " AND o.dataset_id=?"
+            params.append(dataset_id)
+            
+        base_select += f" ORDER BY {sort_expr} ASC"
+        
+        rows = conn.execute(base_select, tuple(params)).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
 
 
-def get_order_by_code(order_code: str) -> dict | None:
+def find_order_in_optimization_runs(order_code: str) -> dict | None:
+    """Tìm thông tin lịch giao thực tế (ngày giao, giờ ETA, xe giao, trạm) trong các lượt tối ưu gần nhất."""
+    if not order_code:
+        return None
     conn = _get_conn()
     try:
+        rows = conn.execute(
+            "SELECT run_id, result_json FROM optimization_runs WHERE status='completed' AND result_json IS NOT NULL ORDER BY id DESC LIMIT 5"
+        ).fetchall()
+        for r in rows:
+            if not r["result_json"]:
+                continue
+            try:
+                data = json.loads(r["result_json"])
+                sched = data.get("schedule", [])
+                for day in sched:
+                    d_date = day.get("date")
+                    d_name = day.get("day_name", "")
+                    for rt in day.get("routes", []):
+                        v_name = rt.get("vehicle_name", "Xe tải")
+                        waybill = rt.get("waybill_code", "")
+                        for st in rt.get("merged_stops", []) + rt.get("raw_stops", []):
+                            st_code = st.get("order_code")
+                            if st_code and str(st_code).upper() == str(order_code).upper():
+                                return {
+                                    "delivery_date": d_date,
+                                    "day_name": d_name,
+                                    "eta": st.get("eta") or st.get("etd"),
+                                    "time_window": st.get("time_window"),
+                                    "vehicle_name": v_name,
+                                    "stop_step": st.get("step"),
+                                    "waybill_code": waybill
+                                }
+                            for d in st.get("deliveries", []) or []:
+                                if d.get("order_code") and str(d.get("order_code")).upper() == str(order_code).upper():
+                                    return {
+                                        "delivery_date": d_date,
+                                        "day_name": d_name,
+                                        "eta": st.get("eta") or st.get("etd"),
+                                        "time_window": st.get("time_window"),
+                                        "vehicle_name": v_name,
+                                        "stop_step": st.get("step"),
+                                        "waybill_code": waybill
+                                    }
+            except Exception:
+                continue
+        return None
+    finally:
+        conn.close()
+
+
+def get_order_by_code(order_code: str) -> dict | None:
+    if not order_code:
+        return None
+    conn = _get_conn()
+    try:
+        schedule_sub = (
+            "(SELECT ds.delivery_date || ' ' || COALESCE(ds.eta, '') "
+            "FROM delivery_schedule ds WHERE ds.order_id = o.id "
+            "ORDER BY ds.delivery_date ASC LIMIT 1)"
+        )
         row = conn.execute(
-            "SELECT o.*, c.name as customer_name, c.address as customer_address, "
-            "c.lat as customer_lat, c.lon as customer_lon "
-            "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-            "WHERE o.order_code=?", (order_code.upper(),)
+            f"SELECT o.*, c.name as customer_name, c.address as customer_address, "
+            f"c.phone as customer_phone, c.lat as customer_lat, c.lon as customer_lon, "
+            f"{schedule_sub} AS scheduled_delivery, "
+            f"COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') "
+            f"FROM order_items WHERE order_id=o.id), '') AS item_summary "
+            f"FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
+            f"WHERE UPPER(o.order_code)=? OR UPPER(o.order_code)=?",
+            (order_code.upper().strip(), order_code.strip())
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        res = dict(row)
+        opt_info = find_order_in_optimization_runs(order_code)
+        if opt_info:
+            res['opt_schedule'] = opt_info
+            if not res.get('scheduled_delivery') or not str(res['scheduled_delivery']).strip():
+                res['scheduled_delivery'] = f"{opt_info['delivery_date']} {opt_info.get('eta', '')}".strip()
+        return res
     finally:
         conn.close()
 
@@ -1408,11 +1570,17 @@ def replace_order_items(order_id: int, items: list[dict]) -> None:
     try:
         conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
         for item in items:
-            name = str(item.get('product_name') or item.get('name') or '').strip()
+            name = str(item.get('product_name') or item.get('item_name') or item.get('name') or '').strip()
             quantity = int(item.get('quantity') or 0)
             if not name or quantity <= 0:
                 continue
-            weight = float(item.get('weight_per_unit_kg') or item.get('weight') or 1.0)
+            weight = float(item.get('weight_per_unit_kg') or item.get('weight') or 0)
+            # Nếu weight_kg là tổng trọng lượng (không phải per-unit), chia cho quantity
+            if weight <= 0 and item.get('weight_kg'):
+                raw_wt = float(item.get('weight_kg') or 0)
+                weight = round(raw_wt / max(1, quantity), 2) if raw_wt > 0 else 1.0
+            if weight <= 0:
+                weight = 1.0  # Fallback: tránh item 0kg trong tính toán
             volume = float(item.get('volume_per_unit_cbm') or item.get('volume') or 0.01)
             
             # Kích thước & thuộc tính
@@ -1589,16 +1757,17 @@ def get_order_items(order_id: int) -> list[dict]:
 # ═══════════════════════════════════════
 
 def save_delivery_schedule(order_id: int, vehicle_id: int, delivery_date: str,
-                           period_index: int, assigned_quantity: int,
-                           assigned_weight_kg: float = 0) -> int:
+                           period_index: int = 1, assigned_quantity: int = 0,
+                           assigned_weight_kg: float = 0, eta: str = None,
+                           stop_sequence: int = None, status: str = 'planned') -> int:
     conn = _get_conn()
     try:
         cur = conn.execute(
             """INSERT INTO delivery_schedule (order_id, vehicle_id, delivery_date,
-               period_index, assigned_quantity, assigned_weight_kg)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               period_index, assigned_quantity, assigned_weight_kg, eta, stop_sequence, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (order_id, vehicle_id, delivery_date, period_index,
-             assigned_quantity, assigned_weight_kg)
+             assigned_quantity, assigned_weight_kg, eta, stop_sequence, status)
         )
         conn.commit()
         return cur.lastrowid

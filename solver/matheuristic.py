@@ -101,6 +101,23 @@ class Route:
         if self.is_overloaded:
             overload_ratio = self.total_load_kg / self.capacity_kg
             base_cost *= (1 + (overload_ratio - 1) * 10)  # Heavy penalty
+        
+        # Penalty nếu xe lớn dừng quá nhiều trạm
+        # capacity >= 5000: max 2 stops
+        # capacity >= 2500: max 3 stops
+        # capacity >= 2000: max 4 stops
+        # smaller: max 10 stops
+        max_allowed_stops = 10
+        if self.capacity_kg >= 5000:
+            max_allowed_stops = 2
+        elif self.capacity_kg >= 2500:
+            max_allowed_stops = 3
+        elif self.capacity_kg >= 2000:
+            max_allowed_stops = 4
+            
+        if self.num_stops > max_allowed_stops:
+            base_cost *= (1 + (self.num_stops - max_allowed_stops) * 2) # X2, X3 cost
+            
         return base_cost
 
     def order_ids(self) -> list[int]:
