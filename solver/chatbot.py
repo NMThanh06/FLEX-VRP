@@ -311,6 +311,8 @@ def _format_delivery_info(order: dict) -> str:
     scheduled = str(order.get('scheduled_delivery') or '').strip()
     order_date = order.get('order_date') or 'N/A'
     pref_date = order.get('delivery_date_preferred') or ''
+    if pref_date == order_date:
+        pref_date = ''
     tw_start = order.get('time_window_start') or ''
     tw_end = order.get('time_window_end') or ''
     
@@ -349,8 +351,7 @@ def _format_delivery_info(order: dict) -> str:
         lines.append("• ✅ **Trạng thái:** Đã lên lịch giao hàng")
         
     elif pref_date or (tw_start and tw_end):
-        d_display = pref_date if pref_date else order_date
-        lines.append(f"• 📅 **Ngày giao dự kiến:** {d_display}")
+        lines.append(f"• 📅 **Ngày giao dự kiến:** {pref_date if pref_date else 'Chưa lên lịch'}")
         if tw_start and tw_end:
             lines.append(f"• ⏰ **Khung giờ hẹn giao:** {tw_start} - {tw_end}")
         elif tw_start or tw_end:
@@ -364,6 +365,7 @@ def _format_delivery_info(order: dict) -> str:
             lines.append("• 📋 **Trạng thái:** Đã có khung giờ hẹn giao, chờ xếp chuyến")
     else:
         lines.append(f"• 📅 **Ngày đặt hàng:** {order_date}")
+        lines.append("• 📅 **Ngày giao dự kiến:** Chưa lên lịch")
         if status == 'optimizing':
             lines.append("• ⏳ **Trạng thái:** Đang chạy thuật toán tối ưu xếp xe...")
         elif status == 'confirmed':

@@ -1394,13 +1394,8 @@ def save_order(customer_id: int = None, order_code: str = None,
     """Tạo đơn hàng mới. Tự sinh mã 6 ký tự nếu không cung cấp."""
     if not order_code:
         order_code = _generate_order_code()
-    if not order_date and delivery_date_preferred:
-        order_date = delivery_date_preferred
-    if not delivery_date_preferred and order_date:
-        delivery_date_preferred = order_date
     if not order_date:
         order_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-        delivery_date_preferred = order_date
 
     conn = _get_conn()
     try:
