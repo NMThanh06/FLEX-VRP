@@ -10,7 +10,7 @@
 
 | # | Vấn đề | Ưu tiên | Lý do xếp trước |
 |---|--------|---------|-----------------|
-| 1 | 🐛 Bug chatbot: hiển thị ngày đặt thay vì ngày giao | 🔴 Critical | Bug hiển thị sai dữ liệu, ảnh hưởng UX trực tiếp |
+| 1 | ✅ **[ĐÃ XỬ LÝ]** Bug chatbot: hiển thị ngày đặt thay vì ngày giao | 🔴 Critical | Bug hiển thị sai dữ liệu, ảnh hưởng UX trực tiếp |
 | 2 | 🧹 Dọn UI: xóa "Nạp 10 Đơn Mẫu" và "Chu kỳ" | 🔴 High | Nhanh, dọn sạch UI trước khi chỉnh form |
 | 3 | ✏️ Hoàn thiện form "Thêm Đơn Hàng" | 🔴 High | Phụ thuộc vào #2 (chỉ còn 1 nút) |
 | 4 | 📊 Sửa số liệu dashboard không khớp DB | 🟡 Medium | Hiển thị sai thống kê |
@@ -18,6 +18,7 @@
 | 6 | 📦 Nâng chiều cao xếp hàng tối đa lên 200cm | 🟡 Medium | Cần data test (#5) để kiểm chứng |
 | 7 | 🤖 AI kiểm tra chất lượng câu trả lời chatbot | 🟢 Nice-to-have | Cải thiện chất lượng dần |
 | 8 | 🚀 Tối ưu tốc độ thuật toán (quyết định ngày giao) | 🟢 Nice-to-have | Refactor lớn, cần ổn định trước |
+| 9 | ✅ **[ĐÃ XỬ LÝ]** Chatbot: Hiển thị tình trạng lịch giao đầy đủ | 🟢 Nice-to-have | Đã code xong tính năng hiển thị xe, ETA, trạm |
 
 ---
 
@@ -57,6 +58,11 @@ f"• Ngày giao: {o.get('delivery_date_preferred', 'N/A')}\n"
 ### Files cần sửa
 - `solver/db.py` (dòng ~1339-1357)
 - `solver/chatbot.py` (dòng ~502-518, dòng ~301-321)
+
+### ✅ Trạng thái: Đã xử lý (2026-09-23)
+**Cách xử lý thực tế:**
+1. Phát hiện root cause bổ sung nằm ở lúc tạo đơn hàng (hàm `save_order` trong `solver/db.py` tự động chép `order_date` sang `delivery_date_preferred` nếu bị trống). Đã xóa bỏ logic ghi đè này.
+2. Thêm một lớp lọc vào `solver/chatbot.py` (hàm `_format_delivery_info`): Nếu phát hiện dữ liệu cũ bị trùng lặp (`pref_date == order_date`), hệ thống sẽ tự xóa chuỗi bị sai và thay bằng hiển thị **"Chưa lên lịch"** kèm theo **"Ngày đặt hàng"** tách biệt rõ ràng.
 
 ---
 
