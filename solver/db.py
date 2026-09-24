@@ -1423,15 +1423,17 @@ import string
 
 def _generate_order_code() -> str:
     """Tạo mã đơn hàng 6 ký tự alphanumeric unique (e.g., A3K9X2)."""
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        # Fallback: random không check trùng
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     try:
-        for _ in range(100):  # max retries
-            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-            existing = conn.execute(
-                "SELECT id FROM orders WHERE order_code=?", (code,)
-            ).fetchone()
-            if not existing:
-                return code
+        with conn.cursor() as cur:
+            for _ in range(100):  # max retries
+                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                cur.execute("SELECT id FROM orders WHERE order_code=%s", (code,))
+                if not cur.fetchone():
+                    return code
         raise RuntimeError("Cannot generate unique order code after 100 attempts")
     finally:
         conn.close()
@@ -1578,117 +1580,154 @@ def find_order_in_optimization_runs(order_code: str) -> dict | None:
 
 
 def get_order_by_code(order_code: str) -> dict | None:
+    """Tra cứu đơn hàng theo mã (MySQL). Dùng bởi chatbot tra cứu đơn."""
     if not order_code:
         return None
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return None
     try:
-        schedule_sub = (
-            "(SELECT ds.delivery_date || ' ' || COALESCE(ds.eta, '') "
-            "FROM delivery_schedule ds WHERE ds.order_id = o.id "
-            "ORDER BY ds.delivery_date ASC LIMIT 1)"
-        )
-        row = conn.execute(
-            f"SELECT o.*, c.name as customer_name, c.address as customer_address, "
-            f"c.phone as customer_phone, c.lat as customer_lat, c.lon as customer_lon, "
-            f"{schedule_sub} AS scheduled_delivery, "
-            f"COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') "
-            f"FROM order_items WHERE order_id=o.id), '') AS item_summary "
-            f"FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-            f"WHERE UPPER(o.order_code)=? OR UPPER(o.order_code)=?",
-            (order_code.upper().strip(), order_code.strip())
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT o.id, o.order_code, o.status, o.is_urgent, o.total_weight_kg,
+                       o.total_volume_cm3 / 1000000.0 as total_volume_cbm,
+                       DATE_FORMAT(o.time_window_start, '%%Y-%%m-%%d %%H:%%i') as time_window_start,
+                       DATE_FORMAT(o.time_window_end, '%%Y-%%m-%%d %%H:%%i') as time_window_end,
+                       DATE_FORMAT(o.created_at, '%%Y-%%m-%%d %%H:%%i') as order_date,
+                       DATE_FORMAT(o.time_window_start, '%%Y-%%m-%%d') as delivery_date_preferred,
+                       o.notes,
+                       u.id as customer_id, u.name as customer_name, u.address as customer_address,
+                       u.latitude as customer_lat, u.longitude as customer_lon, u.phone as customer_phone,
+                       COALESCE((SELECT SUM(quantity) FROM order_items WHERE order_id = o.id), 0) as total_quantity,
+                       COALESCE((
+                           SELECT GROUP_CONCAT(CONCAT(p.name, ' ×', oi.quantity) SEPARATOR ' • ')
+                           FROM order_items oi
+                           JOIN products p ON oi.product_id = p.id
+                           WHERE oi.order_id = o.id
+                       ), '') as item_summary,
+                       '' as scheduled_delivery
+                FROM orders o
+                LEFT JOIN users u ON o.retailer_id = u.id
+                WHERE UPPER(o.order_code) = %s""",
+                (order_code.upper().strip(),)
+            )
+            row = cur.fetchone()
         if not row:
             return None
         res = dict(row)
+        # Bổ sung thông tin từ optimization runs (SQLite - solver data)
         opt_info = find_order_in_optimization_runs(order_code)
         if opt_info:
             res['opt_schedule'] = opt_info
             if not res.get('scheduled_delivery') or not str(res['scheduled_delivery']).strip():
                 res['scheduled_delivery'] = f"{opt_info['delivery_date']} {opt_info.get('eta', '')}".strip()
         return res
+    except Exception as e:
+        print(f"Error get_order_by_code: {e}")
+        return None
     finally:
         conn.close()
 
 
 def get_order_detail(order_id: int) -> dict | None:
-    """Lấy đơn, khách hàng và toàn bộ dòng hàng để giao diện sửa trực tiếp."""
-    conn = _get_conn()
+    """Lấy đơn, khách hàng và toàn bộ dòng hàng để giao diện sửa trực tiếp (MySQL)."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return None
     try:
-        row = conn.execute(
-            """SELECT o.*, c.name AS customer_name, c.address AS customer_address,
-                      c.phone AS customer_phone, c.lat AS customer_lat, c.lon AS customer_lon
-               FROM orders o LEFT JOIN customers c ON c.id=o.customer_id WHERE o.id=?""",
-            (order_id,)
-        ).fetchone()
-        if not row:
-            return None
-        result = dict(row)
-        result['items'] = [dict(item) for item in conn.execute(
-            "SELECT * FROM order_items WHERE order_id=? ORDER BY id", (order_id,)
-        ).fetchall()]
-        return result
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT o.id, o.order_code, o.status, o.is_urgent, o.total_weight_kg,
+                       o.total_volume_cm3 / 1000000.0 as total_volume_cbm,
+                       DATE_FORMAT(o.time_window_start, '%%Y-%%m-%%d %%H:%%i') as time_window_start,
+                       DATE_FORMAT(o.time_window_end, '%%Y-%%m-%%d %%H:%%i') as time_window_end,
+                       DATE_FORMAT(o.created_at, '%%Y-%%m-%%d %%H:%%i') as order_date,
+                       o.notes,
+                       u.id as customer_id, u.name AS customer_name, u.address AS customer_address,
+                       u.phone AS customer_phone, u.latitude AS customer_lat, u.longitude AS customer_lon
+                FROM orders o LEFT JOIN users u ON u.id=o.retailer_id WHERE o.id=%s""",
+                (order_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            result = dict(row)
+            cur.execute(
+                """SELECT oi.id, oi.product_id, p.name as product_name, oi.quantity,
+                       p.weight_kg as weight_per_unit_kg,
+                       (p.length_cm * p.width_cm * p.height_cm) / 1000000.0 as volume_per_unit_cbm,
+                       p.length_cm as depth_cm, p.width_cm as width_cm, p.height_cm as height_cm
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id=%s ORDER BY oi.id""",
+                (order_id,)
+            )
+            result['items'] = cur.fetchall()
+            return result
+    except Exception as e:
+        print(f"Error get_order_detail: {e}")
+        return None
     finally:
         conn.close()
 
 
 def replace_order_items(order_id: int, items: list[dict]) -> None:
-    """Thay toàn bộ dòng hàng rồi tính lại tổng lượng, khối lượng và thể tích."""
-    conn = _get_conn()
+    """Thay toàn bộ dòng hàng rồi tính lại tổng (MySQL Laravel schema)."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return
     try:
-        conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
-        for item in items:
-            name = str(item.get('product_name') or item.get('item_name') or item.get('name') or '').strip()
-            quantity = int(item.get('quantity') or 0)
-            if not name or quantity <= 0:
-                continue
-            weight = float(item.get('weight_per_unit_kg') or item.get('weight') or 0)
-            # Nếu weight_kg là tổng trọng lượng (không phải per-unit), chia cho quantity
-            if weight <= 0 and item.get('weight_kg'):
-                raw_wt = float(item.get('weight_kg') or 0)
-                weight = round(raw_wt / max(1, quantity), 2) if raw_wt > 0 else 1.0
-            if weight <= 0:
-                weight = 1.0  # Fallback: tránh item 0kg trong tính toán
-            volume = float(item.get('volume_per_unit_cbm') or item.get('volume') or 0.01)
-            
-            # Kích thước & thuộc tính
-            w = float(item.get('width_cm') or 0)
-            d = float(item.get('depth_cm') or 0)
-            h = float(item.get('height_cm') or 0)
-            fragile = 1 if item.get('is_fragile') else 0
-            heavy = 1 if item.get('is_heavy') else 0
-            cold = 1 if item.get('requires_cold') else 0
-            
-            if w <= 0 or d <= 0 or h <= 0:
-                dims = get_or_estimate_cargo_dimensions(name, weight, volume)
-                w = dims['width_cm']
-                d = dims['depth_cm']
-                h = dims['height_cm']
-                if not fragile:
-                    fragile = dims['is_fragile']
-                if not heavy:
-                    heavy = dims['is_heavy']
-                if not cold:
-                    cold = dims['requires_cold']
-
-            conn.execute(
-                """INSERT INTO order_items (order_id, product_name, quantity, weight_per_unit_kg,
-                   volume_per_unit_cbm, total_weight_kg, total_volume_cbm,
-                   width_cm, depth_cm, height_cm, is_fragile, is_heavy, requires_cold)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (order_id, name, quantity, weight, volume, quantity * weight, quantity * volume,
-                 w, d, h, fragile, heavy, cold)
-            )
-        totals = conn.execute(
-            """SELECT COALESCE(SUM(quantity), 0), COALESCE(SUM(total_weight_kg), 0),
-                      COALESCE(SUM(total_volume_cbm), 0) FROM order_items WHERE order_id=?""",
-            (order_id,)
-        ).fetchone()
-        conn.execute(
-            """UPDATE orders SET total_quantity=?, total_weight_kg=?, total_volume_cbm=?, updated_at=?
-               WHERE id=?""",
-            (totals[0], totals[1], totals[2], datetime.now().isoformat(), order_id)
-        )
-        conn.commit()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM order_items WHERE order_id=%s", (order_id,))
+            for item in items:
+                name = str(item.get('product_name') or item.get('item_name') or item.get('name') or '').strip()
+                quantity = int(item.get('quantity') or 0)
+                if not name or quantity <= 0:
+                    continue
+                weight = float(item.get('weight_per_unit_kg') or item.get('weight') or 0)
+                if weight <= 0 and item.get('weight_kg'):
+                    raw_wt = float(item.get('weight_kg') or 0)
+                    weight = round(raw_wt / max(1, quantity), 2) if raw_wt > 0 else 1.0
+                if weight <= 0:
+                    weight = 1.0
+                
+                # Kích thước
+                w = float(item.get('width_cm') or 0)
+                d = float(item.get('depth_cm') or 0)
+                h = float(item.get('height_cm') or 0)
+                
+                if w <= 0 or d <= 0 or h <= 0:
+                    dims = get_or_estimate_cargo_dimensions(name, weight, float(item.get('volume_per_unit_cbm') or 0.01))
+                    w = dims['width_cm']
+                    d = dims['depth_cm']
+                    h = dims['height_cm']
+                
+                vol_cm3 = w * d * h if (w > 0 and d > 0 and h > 0) else 10000  # fallback 10L
+                
+                # Tìm hoặc tạo product
+                cur.execute("SELECT id FROM products WHERE name=%s LIMIT 1", (name,))
+                prod = cur.fetchone()
+                if prod:
+                    product_id = prod['id'] if isinstance(prod, dict) else prod[0]
+                else:
+                    import uuid
+                    sku = f"SKU-{str(uuid.uuid4())[:8].upper()}"
+                    cur.execute(
+                        "INSERT INTO products (warehouse_id, sku, name, weight_kg, length_cm, width_cm, height_cm) VALUES (1, %s, %s, %s, %s, %s, %s)",
+                        (sku, name, weight, d, w, h)
+                    )
+                    product_id = cur.lastrowid
+                
+                cur.execute(
+                    """INSERT INTO order_items (order_id, product_id, quantity,
+                       unit_price, subtotal, item_weight_kg, item_volume_cm3, created_at, updated_at)
+                       VALUES (%s, %s, %s, 0, 0, %s, %s, NOW(), NOW())""",
+                    (order_id, product_id, quantity, weight, vol_cm3)
+                )
+        # Cập nhật totals
+        update_order_totals(order_id)
+    except Exception as e:
+        print(f"Error replace_order_items: {e}")
     finally:
         conn.close()
 
@@ -1733,26 +1772,38 @@ def save_product(name: str, weight_kg: float, length_cm: float, width_cm: float,
 
 
 def update_order(order_id: int, **kwargs) -> dict | None:
-    """Cập nhật đơn hàng. kwargs: bất kỳ cột nào trong orders."""
-    conn = _get_conn()
+    """Cập nhật đơn hàng (MySQL Laravel schema)."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return None
     try:
+        # Map tên cột cũ sang Laravel schema
+        col_map = {
+            'customer_id': 'retailer_id',
+            'total_volume_cbm': 'total_volume_cm3',  # cần nhân 1e6
+        }
         allowed = {'status', 'customer_id', 'is_urgent', 'total_quantity', 'total_weight_kg',
-                    'total_volume_cbm', 'time_window_start', 'time_window_end',
-                    'delivery_date_preferred', 'order_date', 'notes', 'source'}
-        updates = {k: v for k, v in kwargs.items() if k in allowed}
-        if 'order_date' in updates and 'delivery_date_preferred' not in updates:
-            updates['delivery_date_preferred'] = updates['order_date']
-        elif 'delivery_date_preferred' in updates and 'order_date' not in updates:
-            updates['order_date'] = updates['delivery_date_preferred']
+                    'total_volume_cbm', 'time_window_start', 'time_window_end', 'notes'}
+        updates = {}
+        for k, v in kwargs.items():
+            if k not in allowed:
+                continue
+            mysql_col = col_map.get(k, k)
+            if k == 'total_volume_cbm':
+                v = float(v or 0) * 1000000  # cbm → cm3
+            updates[mysql_col] = v
         if not updates:
             return None
-        updates['updated_at'] = datetime.now().isoformat()
-        set_clause = ", ".join(f"{k}=?" for k in updates.keys())
-        values = list(updates.values()) + [order_id]
-        conn.execute(f"UPDATE orders SET {set_clause} WHERE id=?", values)
-        conn.commit()
-        row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
-        return dict(row) if row else None
+        with conn.cursor() as cur:
+            set_clause = ", ".join(f"{k}=%s" for k in updates.keys())
+            values = list(updates.values()) + [order_id]
+            cur.execute(f"UPDATE orders SET {set_clause}, updated_at=NOW() WHERE id=%s", values)
+            cur.execute("SELECT id, order_code, status FROM orders WHERE id=%s", (order_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"Error update_order: {e}")
+        return None
     finally:
         conn.close()
 
@@ -1858,12 +1909,27 @@ def save_order_item(order_id: int, product_name: str, quantity: int = 1,
 
 
 def get_order_items(order_id: int) -> list[dict]:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return []
     try:
-        rows = conn.execute(
-            "SELECT * FROM order_items WHERE order_id=? ORDER BY id", (order_id,)
-        ).fetchall()
-        return [dict(r) for r in rows]
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT oi.id, oi.product_id, p.name as product_name, oi.quantity,
+                       p.weight_kg as weight_per_unit_kg,
+                       (p.length_cm * p.width_cm * p.height_cm) / 1000000.0 as volume_per_unit_cbm,
+                       oi.item_weight_kg as total_weight_kg,
+                       oi.item_volume_cm3 / 1000000.0 as total_volume_cbm,
+                       p.width_cm, p.length_cm as depth_cm, p.height_cm
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id=%s ORDER BY oi.id""",
+                (order_id,)
+            )
+            return cur.fetchall()
+    except Exception as e:
+        print(f"Error get_order_items: {e}")
+        return []
     finally:
         conn.close()
 
