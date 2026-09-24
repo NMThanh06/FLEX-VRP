@@ -49,6 +49,7 @@ from db import (
     save_vehicle_cargo_specs, get_vehicle_cargo_spec, get_all_vehicle_cargo_specs,
     save_cargo_dimensions, get_cargo_dimensions, get_or_estimate_cargo_dimensions,
     save_loading_plan, get_loading_plan, save_ai_debate_log, get_ai_debate_logs,
+    get_ai_dashboard_stats, save_human_feedback, reschedule_orders
 )
 from bin_packing import BinPacker2D, BinPacker3D, CargoItem, VehicleCargo
 from ai_debate import ai_debate_council
@@ -1949,6 +1950,144 @@ async def api_get_debate_logs(limit: int = 10):
     logs = get_ai_debate_logs(limit=limit)
     return {"success": True, "logs": logs}
 
+
+@app.get("/api/ai/dashboard")
+async def api_ai_dashboard():
+    """Lấy dữ liệu cho AI Dashboard."""
+    stats = get_ai_dashboard_stats()
+    return {"success": True, "stats": stats}
+
+@app.post("/api/ai/feedback")
+async def api_ai_feedback(request: Request):
+    """Lưu đánh giá từ user về lộ trình."""
+    body = await request.json()
+    run_id = body.get("run_id")
+    feedback_type = body.get("feedback_type", "approve")
+    rating = body.get("rating")
+    comment = body.get("comment")
+    save_human_feedback(run_id, feedback_type, rating, comment)
+    return {"success": True}
+
+@app.post("/api/ai/reschedule")
+async def api_ai_reschedule(request: Request):
+    """Dời lịch các đơn hàng được chỉ định (Human-in-the-loop)."""
+    body = await request.json()
+    order_ids = body.get("order_ids", [])
+    target_date = body.get("target_date")
+    reason = body.get("reason", "Human-in-the-Loop Reschedule")
+    run_id = body.get("run_id")
+    
+    if not order_ids or not target_date:
+        return {"success": False, "error": "Thiếu order_ids hoặc target_date"}
+        
+    res = reschedule_orders(order_ids, target_date, reason, run_id)
+    return {"success": res}
+
+# ----------------------------------------------------------------------
+# IMPORT HÀNG LOẠT & AI AUTO-FILL (Bước 1.2)
+# ----------------------------------------------------------------------
+
+from db import save_product
+from chatbot import call_llm
+import json
+
+@app.post("/api/products/ai-estimate")
+async def api_products_ai_estimate(request: Request):
+    """Sử dụng LLM để dự đoán khối lượng và kích thước từ tên sản phẩm."""
+    body = await request.json()
+    product_name = body.get("name", "")
+    
+    if not product_name:
+        return {"success": False, "error": "Thiếu tên sản phẩm"}
+        
+    system_prompt = """Bạn là chuyên gia logistics. Nhiệm vụ của bạn là ước tính khối lượng (kg) và kích thước (dài x rộng x cao tính bằng cm) của các mặt hàng dựa vào tên gọi. 
+    Kích thước thường là khi đã đóng gói trong thùng/hộp.
+    BẮT BUỘC trả về ĐÚNG MỘT JSON hợp lệ, không có markdown, theo định dạng:
+    {"weight_kg": 15.5, "length_cm": 40, "width_cm": 30, "height_cm": 25}"""
+    
+    prompt = f"Ước tính cho mặt hàng sau: {product_name}"
+    
+    try:
+        response_text, _ = call_llm(prompt, system_prompt)
+        # Parse JSON from response
+        # Có thể LLM trả về markdown ```json ... ```
+        clean_text = response_text.replace('```json', '').replace('```', '').strip()
+        data = json.loads(clean_text)
+        return {"success": True, "estimate": data}
+    except Exception as e:
+        print(f"Error calling LLM for product estimate: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/products")
+async def api_save_product(request: Request):
+    """Lưu thông tin sản phẩm (có thể do AI đoán hoặc người dùng nhập) vào MySQL."""
+    body = await request.json()
+    name = body.get("name")
+    w = float(body.get("weight_kg", 1.0))
+    l = float(body.get("length_cm", 10.0))
+    wi = float(body.get("width_cm", 10.0))
+    h = float(body.get("height_cm", 10.0))
+    
+    if not name:
+        return {"success": False, "error": "Missing name"}
+        
+    pid = save_product(name, w, l, wi, h)
+    return {"success": True, "product_id": pid}
+
+@app.post("/api/b2b/orders/bulk")
+async def api_b2b_orders_bulk(request: Request):
+    """Import nhiều đơn hàng từ file CSV/Excel."""
+    body = await request.json()
+    orders = body.get("orders", [])
+    dataset_id = body.get("dataset_id", 1)
+    
+    if not orders:
+        return {"success": False, "error": "Danh sách đơn rỗng"}
+        
+    from db import save_order, save_order_item
+    
+    count = 0
+    for o in orders:
+        try:
+            # orders có dạng: {customer_name, address, lat, lon, notes, items: [{name, qty, weight, vol}]}
+            # Ta dùng save_order (cần customer_id, nhưng save_order tự lo việc check tên KH).
+            # Lưu ý: Hàm save_order của SQLite cũ tự tra KH, nhưng giờ ta truyền order_date.
+            from db import save_customer
+            cid = save_customer(o.get('customer_name', 'Unknown'), o.get('address', ''), float(o.get('lat', 0)), float(o.get('lon', 0)))
+            
+            # create order
+            oid = save_order(
+                customer_id=cid,
+                order_code=o.get('order_code'),
+                status='pending',
+                notes=o.get('notes', ''),
+                dataset_id=dataset_id,
+                time_window_start=o.get('time_window_start'),
+                time_window_end=o.get('time_window_end'),
+                delivery_date_preferred=o.get('delivery_date_preferred'),
+                source='import'
+            )
+            
+            # add items
+            items = o.get("items", [])
+            for it in items:
+                save_order_item(
+                    order_id=oid,
+                    product_name=it.get('name', 'Hàng hóa'),
+                    quantity=int(it.get('qty', 1)),
+                    weight_per_unit_kg=float(it.get('weight_kg', 0)),
+                    volume_per_unit_cbm=float(it.get('volume_cbm', 0))
+                )
+            
+            # update totals
+            from db import update_order_totals
+            update_order_totals(oid)
+            count += 1
+        except Exception as e:
+            print(f"Lỗi import đơn: {e}")
+            continue
+            
+    return {"success": True, "imported_count": count}
 
 if __name__ == "__main__":
     print("\n" + "=" * 50)

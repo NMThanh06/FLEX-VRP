@@ -10,9 +10,12 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Google Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS cho chức năng Nhập Hàng Loạt -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <!-- Three.js & OrbitControls for 3D Cargo Packing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -27,29 +30,30 @@
         }
 
         :root {
-            --bg: #0f1117;
-            --surface: #1a1d27;
-            --surface-2: #232733;
-            --surface-3: #2d3242;
-            --border: #2e3345;
-            --border-focus: #4b526d;
-            --text: #e4e6f0;
-            --text-dim: #8b8fa3;
-            --accent: #6c63ff;
-            --accent-light: #8b5cf6;
-            --accent-glow: rgba(108, 99, 255, 0.25);
-            --green: #34d399;
-            --green-glow: rgba(52, 211, 153, 0.2);
-            --yellow: #fbbf24;
-            --yellow-glow: rgba(251, 191, 36, 0.2);
-            --red: #f87171;
-            --red-glow: rgba(248, 113, 113, 0.2);
-            --blue: #60a5fa;
+            /* Blue Monochromatic Theme */
+            --bg: #0a1128;
+            --surface: #121e42;
+            --surface-2: #1a2a5c;
+            --surface-3: #22387a;
+            --border: #2b4592;
+            --border-focus: #3d5fb5;
+            --text: #e0e7ff;
+            --text-dim: #94a3b8;
+            --accent: #3b82f6;
+            --accent-light: #60a5fa;
+            --accent-glow: rgba(59, 130, 246, 0.25);
+            --green: #10b981;
+            --green-glow: rgba(16, 185, 129, 0.2);
+            --yellow: #f59e0b;
+            --yellow-glow: rgba(245, 158, 11, 0.2);
+            --red: #ef4444;
+            --red-glow: rgba(239, 68, 68, 0.2);
+            --blue: #3b82f6;
             --radius: 12px;
         }
 
         body {
-            font-family: 'Inter', -apple-system, sans-serif;
+            font-family: 'Be Vietnam Pro', -apple-system, sans-serif;
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
@@ -2769,6 +2773,9 @@
             <button class="nav-tab" id="tabDashboardBtn" onclick="switchTab('dashboard')">
                 <span>📊</span> Dashboard Giao Thông
             </button>
+            <button class="nav-tab" id="tabDriverBtn" onclick="switchTab('driver')">
+                <span>📱</span> Lộ Trình Tài Xế
+            </button>
         </nav>
     </header>
 
@@ -2798,7 +2805,10 @@
                     </div>
                     <div class="b2b-btn-group">
                         <button class="btn-b2b" onclick="openNewOrderModal()">
-                            <span>➕</span> Thêm Đơn Hàng
+                            <span>➕</span> Thêm Đơn
+                        </button>
+                        <button class="btn-b2b" onclick="openBulkImportModal()" style="background:var(--surface-3); border-color:var(--accent);">
+                            <span>📥</span> Nhập Hàng Loạt
                         </button>
                         <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-dim);background:var(--surface-2);padding:6px 12px;border-radius:8px;border:1px solid var(--border);">
                             <span>Tối đa:</span>
@@ -3883,7 +3893,128 @@
                         </table>
                     </div>
                 </div>
+        </div>
+    </div>
+
+    <!-- ═══ TAB 3: GIAO DIỆN TÀI XẾ ═══ -->
+    <div id="viewDriver" class="tab-view">
+        <div style="max-width: 480px; margin: 0 auto; background: var(--bg); min-height: calc(100vh - 61px); display: flex; flex-direction: column;">
+            <div style="padding: 16px; background: var(--surface); border-bottom: 1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+                    <div style="font-weight: 700; font-size: 1.1rem; color:var(--text);">Chuyến hiện tại</div>
+                    <span class="badge" style="background: rgba(52,211,153,0.15); color: var(--green);">Đang giao</span>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-dim); margin-bottom: 4px;">Xe: <strong>BKS 51D-123.45 (Xe tải nhẹ)</strong></div>
+                <div style="font-size:0.85rem; color:var(--text-dim);">Tiến độ: <strong style="color:var(--accent);">2/5</strong> điểm dừng</div>
             </div>
+            
+            <div id="driverMap" style="height: 200px; width: 100%; border-bottom: 1px solid var(--border); background:var(--surface-2); display:flex; justify-content:center; align-items:center; color:var(--text-dim); font-size:0.85rem;">
+                [Bản đồ Mini - Loading...]
+            </div>
+
+            <div style="flex:1; overflow-y:auto; padding: 16px;">
+                <div class="driver-stop-list">
+                    <!-- Stop 1 (Done) -->
+                    <div style="background:var(--surface-2); border-left:4px solid var(--green); border-radius:8px; padding:12px; margin-bottom:12px; opacity:0.6;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-weight:600; font-size:0.9rem; color:var(--text);">1. Kho Tổng Hub A</span>
+                            <span style="font-size:0.75rem; color:var(--green);">08:00 (Đã lấy)</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Stop 2 (Current) -->
+                    <div style="background:var(--surface-2); border-left:4px solid var(--accent); border-radius:8px; padding:12px; margin-bottom:12px; box-shadow:0 4px 12px rgba(108,99,255,0.15);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-weight:600; font-size:0.95rem; color:var(--text);">2. Cửa hàng Tạp hóa Lan</span>
+                            <span style="font-size:0.75rem; color:var(--accent);">Dự kiến 08:30</span>
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">📍 123 Nguyễn Thị Minh Khai, Q1</div>
+                        <div style="font-size:0.8rem; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; margin-bottom:12px; color:var(--text);">
+                            📦 Đơn: #ORD-9999<br>
+                            👉 Hàng: Thùng Bia Heineken (2), Nước lọc (1)
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn btn-primary" style="flex:1; padding:8px; font-size:0.9rem;">✅ Hoàn thành</button>
+                            <button class="btn btn-secondary" style="flex:1; padding:8px; font-size:0.9rem; background:rgba(239,68,68,0.15); color:var(--red); border-color:rgba(239,68,68,0.3);">❌ Thất bại</button>
+                        </div>
+                    </div>
+
+                    <!-- Stop 3 (Next) -->
+                    <div style="background:var(--surface-2); border-left:4px solid var(--border); border-radius:8px; padding:12px; margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-weight:600; font-size:0.9rem; color:var(--text);">3. Siêu thị Mini Mart</span>
+                            <span style="font-size:0.75rem; color:var(--text-dim);">Dự kiến 09:15</span>
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-dim);">📍 456 Lê Lợi, Q1</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Bulk Import Modal ── -->
+    <div class="modal-overlay" id="bulkImportModal">
+        <div class="modal-content" style="width: 800px; max-width: 95%;">
+            <div class="modal-title">📥 Nhập Liệu Hàng Loạt & AI Auto-fill</div>
+            
+            <div class="nav-tabs" style="margin-bottom: 16px;">
+                <button class="nav-tab active" id="tabImportCsvBtn" onclick="switchImportTab('csv')">CSV/Excel</button>
+                <button class="nav-tab" id="tabImportWhBtn" onclick="switchImportTab('warehouse')">Quản lý Kho</button>
+                <button class="nav-tab" id="tabImportVehBtn" onclick="switchImportTab('vehicle')">Quản lý Xe</button>
+            </div>
+
+            <!-- TAB 1: CSV/Excel -->
+            <div id="importTabCsv" class="import-tab-view active">
+                <div class="input-group">
+                    <label>Chọn file dữ liệu (.csv, .xlsx)</label>
+                    <input type="file" id="bulkImportFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" onchange="previewBulkImportFile(event)">
+                </div>
+                
+                <div id="bulkImportWarning" style="display:none; background:rgba(239,68,68,0.1); color:var(--red); padding:10px; border-radius:8px; border:1px solid rgba(239,68,68,0.3); margin-bottom:12px; font-size:0.85rem;">
+                    <strong>⚠️ Phát hiện thiếu thông số kích thước/khối lượng ở một số mặt hàng!</strong>
+                    <div style="margin-top: 8px;">
+                        <button class="btn btn-primary btn-sm" onclick="runAIAutoFill()">🤖 Nhập tự động bằng AI</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showManualFillModal()">✏️ Nhập thủ công</button>
+                    </div>
+                </div>
+
+                <div class="table-scroll" style="max-height: 300px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px;">
+                    <table class="roads-table" id="bulkImportTable">
+                        <thead>
+                            <tr>
+                                <th>Mã đơn</th>
+                                <th>Khách hàng</th>
+                                <th>Sản phẩm</th>
+                                <th>SL</th>
+                                <th>Nặng (kg)</th>
+                                <th>KT (DxRxC)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkImportTableBody">
+                            <tr><td colspan="6" style="text-align:center; color:var(--text-dim); padding:20px;">Chưa có dữ liệu</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div id="bulkImportStatus" style="font-size:0.85rem; color:var(--text-dim);">Sẵn sàng import 0 đơn</div>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn btn-secondary" onclick="closeBulkImportModal()">Hủy</button>
+                        <button class="btn btn-primary" id="btnSubmitBulkImport" onclick="submitBulkImport()">🚀 Bắt đầu Import</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: Kho bãi -->
+            <div id="importTabWarehouse" class="import-tab-view" style="display:none;">
+                <div style="text-align:center; padding: 40px; color:var(--text-dim);">Tính năng Quản lý Kho bãi đang phát triển</div>
+            </div>
+
+            <!-- TAB 3: Xe tải -->
+            <div id="importTabVehicle" class="import-tab-view" style="display:none;">
+                <div style="text-align:center; padding: 40px; color:var(--text-dim);">Tính năng Quản lý Xe tải đang phát triển</div>
+            </div>
+            
         </div>
     </div>
 
@@ -3967,6 +4098,7 @@
         // PHASE II: B2B ORDERS & AI CHATBOT STATE
         // ═══════════════════════════════════════
         let b2bInitialized = false;
+        let driverInitialized = false;
         let currentB2BOrders = [];
         let currentB2BFilter = 'all';
         let currentChatEngine = 'gemini';
@@ -4156,6 +4288,16 @@
         // ═══════════════════════════════════════
         // TAB SWITCHER
         // ═══════════════════════════════════════
+        let driverMapInstance = null;
+        function initDriverView() {
+            if (!driverMapInstance) {
+                driverMapInstance = L.map('driverMap', { zoomControl: false, attributionControl: false }).setView([10.762622, 106.660172], 13);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(driverMapInstance);
+            }
+            setTimeout(() => {
+                if (driverMapInstance) driverMapInstance.invalidateSize();
+            }, 200);
+        }
         function switchTab(name) {
             document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
@@ -4167,6 +4309,10 @@
                 document.getElementById('tabOptimizerBtn').classList.add('active');
                 document.getElementById('viewOptimizer').classList.add('active');
                 if (map) setTimeout(() => map.invalidateSize(), 200);
+            } else if (name === 'driver') {
+                document.getElementById('tabDriverBtn').classList.add('active');
+                document.getElementById('viewDriver').classList.add('active');
+                if (!driverInitialized) { initDriverView(); driverInitialized = true; }
             } else {
                 document.getElementById('tabDashboardBtn').classList.add('active');
                 document.getElementById('viewDashboard').classList.add('active');
@@ -5014,6 +5160,16 @@
 
                 const tripsHtml = day.routes.map((rt, rIdx) => {
                     const stopsSummary = (rt.merged_stops || rt.stops).map(st => st.name).filter((name, i, arr) => i === 0 || name !== arr[i - 1]).join(' ➔ ');
+                    const ordersHtml = (rt.merged_stops || rt.stops).filter(st => st.order_code).map(st => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <span style="font-size:0.75rem;">📦 ${st.order_code} - ${st.name}</span>
+                            <div>
+                                <button class="btn-b2b" style="padding:2px 6px; font-size:0.7rem; background:rgba(52,211,153,0.15); color:var(--green); border-color:rgba(52,211,153,0.3);" onclick="logHumanFeedback('approve', ['${st.order_id}'])">✅ Giữ</button>
+                                <button class="btn-b2b" style="padding:2px 6px; font-size:0.7rem; background:rgba(245,158,11,0.15); color:var(--yellow); border-color:rgba(245,158,11,0.3);" onclick="promptRescheduleOrder(${st.order_id}, '${st.order_code}')">🔄 Dời ngày</button>
+                            </div>
+                        </div>
+                    `).join('');
+
                     return `
                 <div class="trip-item">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
@@ -5029,9 +5185,16 @@
                     <div style="font-size:0.78rem;color:var(--text);line-height:1.4;margin-top:8px;">
                         <strong>Hành trình:</strong> ${stopsSummary}
                     </div>
-                    <div style="text-align:right;">
+                    
+                    <!-- DANH SÁCH ĐƠN HÀNG (HUMAN-IN-THE-LOOP) -->
+                    <div style="margin-top: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 6px 10px;">
+                        <strong style="font-size:0.75rem; color:var(--accent-light);">🛒 Các đơn hàng trong chuyến:</strong>
+                        <div style="margin-top: 4px;">${ordersHtml || '<span style="font-size:0.75rem;color:var(--text-dim);">Chỉ có trạm về Depot</span>'}</div>
+                    </div>
+
+                    <div style="text-align:right; margin-top: 10px;">
                         <button class="btn-b2b" style="padding:4px 10px;font-size:0.72rem;" onclick="viewTripDetailOnMap(${dIdx}, ${rIdx})">
-                            🗺️ Xem Lộ Trình Trên Bản Đồ
+                            🗺️ Xem Lộ Trình Bản Đồ
                         </button>
                     </div>
                 </div>
@@ -8208,6 +8371,246 @@
                 console.error('[Holiday]', e);
                 document.getElementById('kpiHolidayMainText').textContent = 'Không thể tải';
             }
+        }
+
+        // ═══════════════════════════════════════
+        // HUMAN-IN-THE-LOOP (AI FEEDBACK)
+        // ═══════════════════════════════════════
+
+        async function logHumanFeedback(type, orderIds) {
+            try {
+                const res = await fetch('/api/ai/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        run_id: window._currentRunId || 'manual',
+                        feedback_type: type,
+                        affected_order_ids: JSON.stringify(orderIds)
+                    })
+                });
+                const d = await res.json();
+                if (d.success) alert('Đã ghi nhận tương tác, AI sẽ tự học hỏi!');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function promptRescheduleOrder(orderId, orderCode) {
+            const today = new Date();
+            today.setDate(today.getDate() + 1); // Default dời sang ngày mai
+            const defaultDate = today.toISOString().split('T')[0];
+            
+            const newDate = prompt(`Nhập ngày ưu tiên mới cho đơn ${orderCode} (YYYY-MM-DD):`, defaultDate);
+            if (!newDate) return;
+            
+            const reason = prompt('Nhập lý do dời lịch (Khách xin lùi, thiếu xe, ...):', 'Tối ưu lại do thiếu tải trọng xe');
+            if (reason === null) return;
+            
+            try {
+                const res = await fetch('/api/ai/reschedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_ids: [orderId],
+                        target_date: newDate,
+                        reason: reason,
+                        run_id: window._currentRunId || 'manual'
+                    })
+                });
+                const d = await res.json();
+                if (d.success) {
+                    alert(`Đã dời đơn ${orderCode} sang ${newDate}.`);
+                    // Reload orders/routes if necessary
+                } else {
+                    alert('Lỗi: ' + (d.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Lỗi kết nối');
+            }
+        }
+
+        // ═══════════════════════════════════════
+        // BULK IMPORT & AI AUTO-FILL
+        // ═══════════════════════════════════════
+        let bulkOrdersData = [];
+
+        function openBulkImportModal() {
+            document.getElementById('bulkImportModal').classList.add('active');
+            switchImportTab('csv');
+        }
+
+        function closeBulkImportModal() {
+            document.getElementById('bulkImportModal').classList.remove('active');
+        }
+
+        function switchImportTab(tabId) {
+            document.querySelectorAll('#bulkImportModal .nav-tab').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#bulkImportModal .import-tab-view').forEach(view => view.style.display = 'none');
+
+            if (tabId === 'csv') {
+                document.getElementById('tabImportCsvBtn').classList.add('active');
+                document.getElementById('importTabCsv').style.display = 'block';
+            } else if (tabId === 'warehouse') {
+                document.getElementById('tabImportWhBtn').classList.add('active');
+                document.getElementById('importTabWarehouse').style.display = 'block';
+            } else if (tabId === 'vehicle') {
+                document.getElementById('tabImportVehBtn').classList.add('active');
+                document.getElementById('importTabVehicle').style.display = 'block';
+            }
+        }
+
+        function previewBulkImportFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const data = evt.target.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+                
+                bulkOrdersData = [];
+                let hasMissingSpecs = false;
+                
+                rows.forEach(r => {
+                    const pName = r['Sản phẩm'] || r['Tên Sản Phẩm'] || r['Product'] || '';
+                    const qty = parseInt(r['Số lượng'] || r['SL'] || r['Qty'] || 1);
+                    const weight = parseFloat(r['Nặng (kg)'] || r['Weight'] || 0);
+                    const length = parseFloat(r['Dài'] || 0);
+                    const width = parseFloat(r['Rộng'] || 0);
+                    const height = parseFloat(r['Cao'] || 0);
+                    
+                    if (pName && (weight === 0 || length === 0 || width === 0 || height === 0)) {
+                        hasMissingSpecs = true;
+                    }
+
+                    bulkOrdersData.push({
+                        order_code: r['Mã đơn'] || r['Mã Đơn'] || '',
+                        customer_name: r['Khách hàng'] || r['Khách Hàng'] || 'Khách Vãng Lai',
+                        address: r['Địa chỉ'] || r['Địa Chỉ'] || '',
+                        lat: parseFloat(r['Lat'] || 0),
+                        lon: parseFloat(r['Lon'] || 0),
+                        time_window_start: r['Giờ mở'] || r['Giờ nhận'] || '08:00',
+                        time_window_end: r['Giờ đóng'] || r['Giờ kết thúc'] || '18:00',
+                        delivery_date_preferred: r['Ngày giao'] || new Date().toISOString().split('T')[0],
+                        items: [{
+                            name: pName,
+                            qty: qty,
+                            weight_kg: weight,
+                            length_cm: length,
+                            width_cm: width,
+                            height_cm: height,
+                            volume_cbm: (length * width * height) / 1000000
+                        }]
+                    });
+                });
+
+                renderBulkImportTable();
+                
+                if (hasMissingSpecs) {
+                    document.getElementById('bulkImportWarning').style.display = 'block';
+                } else {
+                    document.getElementById('bulkImportWarning').style.display = 'none';
+                }
+                
+                document.getElementById('bulkImportStatus').textContent = `Sẵn sàng import ${bulkOrdersData.length} đơn`;
+            };
+            reader.readAsBinaryString(file);
+        }
+        
+        function renderBulkImportTable() {
+            const tbody = document.getElementById('bulkImportTableBody');
+            if (bulkOrdersData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Không có dữ liệu</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = bulkOrdersData.slice(0, 50).map(o => {
+                const item = o.items[0];
+                const specWarning = (item.weight_kg === 0 || item.length_cm === 0) 
+                    ? `<span style="color:var(--red);">⚠️ Thiếu</span>` 
+                    : `${item.length_cm}x${item.width_cm}x${item.height_cm}`;
+                
+                return `<tr>
+                    <td>${o.order_code}</td>
+                    <td>${o.customer_name}</td>
+                    <td>${item.name}</td>
+                    <td>${item.qty}</td>
+                    <td>${item.weight_kg > 0 ? item.weight_kg : '<span style="color:var(--red);">⚠️</span>'}</td>
+                    <td>${specWarning}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function runAIAutoFill() {
+            const missingItems = [];
+            bulkOrdersData.forEach(o => {
+                o.items.forEach(it => {
+                    if (it.weight_kg === 0 || it.length_cm === 0) {
+                        missingItems.push(it);
+                    }
+                });
+            });
+            
+            if (missingItems.length === 0) return;
+            
+            document.getElementById('bulkImportWarning').innerHTML = '<strong>🤖 AI đang suy luận kích thước...</strong>';
+            
+            for (let it of missingItems) {
+                try {
+                    const res = await fetch('/api/products/ai-estimate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ name: it.name })
+                    });
+                    const d = await res.json();
+                    if (d.success && d.estimate) {
+                        it.weight_kg = d.estimate.weight_kg;
+                        it.length_cm = d.estimate.length_cm;
+                        it.width_cm = d.estimate.width_cm;
+                        it.height_cm = d.estimate.height_cm;
+                        it.volume_cbm = (it.length_cm * it.width_cm * it.height_cm) / 1000000;
+                    }
+                } catch(e) { console.error(e); }
+            }
+            
+            renderBulkImportTable();
+            document.getElementById('bulkImportWarning').innerHTML = '<strong style="color:var(--green);">✅ AI đã suy đoán xong! Thông tin sẽ được lưu lại tự động khi Import.</strong>';
+            setTimeout(() => { document.getElementById('bulkImportWarning').style.display = 'none'; }, 5000);
+        }
+
+        function showManualFillModal() {
+            alert('Tính năng nhập thủ công đang mở ra...');
+        }
+
+        async function submitBulkImport() {
+            if (bulkOrdersData.length === 0) return;
+            const btn = document.getElementById('btnSubmitBulkImport');
+            btn.innerHTML = 'Đang tải lên...';
+            btn.disabled = true;
+            
+            try {
+                const res = await fetch('/api/b2b/orders/bulk', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ orders: bulkOrdersData, dataset_id: window._currentDatasetId })
+                });
+                const d = await res.json();
+                if (d.success) {
+                    alert(`Đã import thành công ${d.imported_count} đơn!`);
+                    closeBulkImportModal();
+                    loadB2BOrders();
+                } else {
+                    alert('Lỗi: ' + d.error);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Lỗi kết nối');
+            }
+            btn.innerHTML = '🚀 Bắt đầu Import';
+            btn.disabled = false;
         }
 
         // ═══════════════════════════════════════

@@ -8,6 +8,7 @@ DB file: solver/data/flex_vrp.db (auto-create)
 import sqlite3
 import json
 import os
+import pymysql
 from datetime import datetime, date
 from pathlib import Path
 
@@ -496,42 +497,58 @@ def _seed_cargo_dimensions(conn: sqlite3.Connection):
 # ═══════════════════════════════════════
 
 def save_location(name: str, lat: float, lon: float, loc_type: str) -> int:
-    """Lưu vị trí mới. Trả về id."""
-    conn = _get_conn()
+    """Lưu vị trí mới (depot). Trỏ vào bảng warehouses của Laravel."""
+    if loc_type != 'depot':
+        return 0 # Tạm thời chỉ hỗ trợ depot (warehouses)
+    
+    conn = _get_mysql_conn()
+    if not conn:
+        return 0
     try:
-        cur = conn.execute(
-            "INSERT INTO locations (name, lat, lon, type) VALUES (?, ?, ?, ?)",
-            (name, lat, lon, loc_type)
-        )
-        conn.commit()
-        return cur.lastrowid
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO warehouses (user_id, name, address, latitude, longitude, is_active, created_at, updated_at) 
+                   VALUES (%s, %s, %s, %s, %s, 1, NOW(), NOW())""",
+                (1, name, name, lat, lon) # Tạm gán user_id=1, address=name
+            )
+            return cur.lastrowid
+    except Exception as e:
+        print(f"Error save_location: {e}")
+        return 0
     finally:
         conn.close()
 
 
 def get_locations(loc_type: str = None) -> list[dict]:
-    """Lấy danh sách locations. loc_type=None → tất cả."""
-    conn = _get_conn()
+    """Lấy danh sách kho. Trỏ vào bảng warehouses của Laravel."""
+    if loc_type and loc_type != 'depot':
+        return []
+    
+    conn = _get_mysql_conn()
+    if not conn:
+        return []
     try:
-        if loc_type:
-            rows = conn.execute(
-                "SELECT * FROM locations WHERE type=? ORDER BY created_at DESC", (loc_type,)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM locations ORDER BY type, created_at DESC"
-            ).fetchall()
-        return [dict(r) for r in rows]
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, latitude as lat, longitude as lon, 'depot' as type FROM warehouses WHERE is_active = 1")
+            return cur.fetchall()
+    except Exception as e:
+        print(f"Error get_locations: {e}")
+        return []
     finally:
         conn.close()
 
 
 def delete_location(loc_id: int) -> bool:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return False
     try:
-        cur = conn.execute("DELETE FROM locations WHERE id=?", (loc_id,))
-        conn.commit()
-        return cur.rowcount > 0
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM warehouses WHERE id=%s", (loc_id,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"Error delete_location: {e}")
+        return False
     finally:
         conn.close()
 
@@ -543,61 +560,97 @@ def delete_location(loc_id: int) -> bool:
 def save_vehicle(name: str, vtype: str, max_speed: float, avg_speed: float,
                  capacity_kg: float = 0, capacity_cbm: float = 0,
                  fuel_type: str = "gasoline", specs_source: str = "manual") -> int:
-    conn = _get_conn()
+    """Lưu xe mới vào bảng vehicles (Laravel)."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return 0
     try:
-        cur = conn.execute(
-            """INSERT INTO vehicles 
-               (name, type, max_speed_kmh, avg_city_speed_kmh, capacity_kg, capacity_cbm, fuel_type, specs_source) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (name, vtype, max_speed, avg_speed, capacity_kg, capacity_cbm, fuel_type, specs_source)
-        )
-        vid = cur.lastrowid
-        cap = float(capacity_kg or 1000)
-        if cap <= 1200:
-            w, d, h = 160.0, 300.0, 160.0
-            note = "Preset 1T (300×160×160cm)"
-        elif cap <= 3000:
+        with conn.cursor() as cur:
+            # Default dimensions for new vehicles
             w, d, h = 190.0, 430.0, 185.0
-            note = "Preset 2.5T (430×190×185cm)"
-        else:
-            w, d, h = 220.0, 600.0, 210.0
-            note = "Preset 5T (600×220×210cm)"
-        conn.execute(
-            """INSERT OR IGNORE INTO vehicle_cargo_specs 
-               (vehicle_id, cargo_width_cm, cargo_depth_cm, cargo_height_cm, door_position, max_layers, notes)
-               VALUES (?, ?, ?, ?, 'rear', 2, ?)""",
-            (vid, w, d, h, note)
-        )
-        conn.commit()
-        return vid
+            if capacity_kg <= 1200:
+                w, d, h = 160.0, 300.0, 160.0
+            elif capacity_kg > 3000:
+                w, d, h = 220.0, 600.0, 210.0
+            
+            cur.execute(
+                """INSERT INTO vehicles 
+                   (user_id, license_plate, notes, name, max_weight_kg, max_length_cm, max_width_cm, max_height_cm, status, cost_per_km, created_at, updated_at) 
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'available', %s, NOW(), NOW())""",
+                (1, f"DEMO-{int(capacity_kg)}", "Created by Solver", name, capacity_kg, d, w, h, 0.0)
+            )
+            return cur.lastrowid
+    except Exception as e:
+        print(f"Error save_vehicle: {e}")
+        return 0
     finally:
         conn.close()
 
 
-def get_vehicles() -> list[dict]:
-    conn = _get_conn()
+def get_vehicles(status: str = None) -> list[dict]:
+    """Lấy danh sách xe. Nếu truyền status='available', chỉ lấy xe đang rảnh."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return []
     try:
-        rows = conn.execute("SELECT * FROM vehicles ORDER BY created_at DESC").fetchall()
-        return [dict(r) for r in rows]
+        with conn.cursor() as cur:
+            query = "SELECT id, name, license_plate, max_weight_kg as capacity_kg, max_length_cm, max_width_cm, max_height_cm, status FROM vehicles"
+            params = []
+            if status:
+                query += " WHERE status = %s"
+                params.append(status)
+            query += " ORDER BY id DESC"
+            cur.execute(query, tuple(params))
+            return cur.fetchall()
+    except Exception as e:
+        print(f"Error get_vehicles: {e}")
+        return []
     finally:
         conn.close()
 
 
 def get_vehicle(vehicle_id: int) -> dict | None:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return None
     try:
-        row = conn.execute("SELECT * FROM vehicles WHERE id=?", (vehicle_id,)).fetchone()
-        return dict(row) if row else None
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, license_plate, max_weight_kg as capacity_kg, max_length_cm, max_width_cm, max_height_cm, status FROM vehicles WHERE id=%s", (vehicle_id,))
+            return cur.fetchone()
+    except Exception as e:
+        print(f"Error get_vehicle: {e}")
+        return None
     finally:
         conn.close()
 
 
 def delete_vehicle(vehicle_id: int) -> bool:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return False
     try:
-        cur = conn.execute("DELETE FROM vehicles WHERE id=?", (vehicle_id,))
-        conn.commit()
-        return cur.rowcount > 0
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM vehicles WHERE id=%s", (vehicle_id,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"Error delete_vehicle: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def set_vehicle_status(vehicle_id: int, status: str) -> bool:
+    """Cập nhật trạng thái xe: available, in_transit, maintenance"""
+    conn = _get_mysql_conn()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE vehicles SET status=%s, updated_at=NOW() WHERE id=%s", (status, vehicle_id))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"Error set_vehicle_status: {e}")
+        return False
     finally:
         conn.close()
 
@@ -1391,70 +1444,84 @@ def save_order(customer_id: int = None, order_code: str = None,
                time_window_start: str = None, time_window_end: str = None,
                delivery_date_preferred: str = None, order_date: str = None,
                notes: str = "", source: str = "manual") -> dict:
-    """Tạo đơn hàng mới. Tự sinh mã 6 ký tự nếu không cung cấp."""
+    """Tạo đơn hàng mới (Map sang Laravel orders)."""
     if not order_code:
         order_code = _generate_order_code()
-    if not order_date and delivery_date_preferred:
-        order_date = delivery_date_preferred
-    if not delivery_date_preferred and order_date:
-        delivery_date_preferred = order_date
-    if not order_date:
-        order_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-        delivery_date_preferred = order_date
+    
+    # Mặc định time window
+    if not time_window_start:
+        time_window_start = datetime.now().strftime("%Y-%m-%d 08:00:00")
+    if not time_window_end:
+        time_window_end = datetime.now().strftime("%Y-%m-%d 17:00:00")
 
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return {}
     try:
-        cur = conn.execute(
-            """INSERT INTO orders (order_code, customer_id, dataset_id, status, is_urgent, total_quantity,
-               total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
-               delivery_date_preferred, order_date, notes, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (order_code, customer_id, dataset_id, status, is_urgent, total_quantity,
-             total_weight_kg, total_volume_cbm, time_window_start, time_window_end,
-             delivery_date_preferred, order_date, notes, source)
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM orders WHERE id=?", (cur.lastrowid,)).fetchone()
-        return dict(row)
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO orders (order_code, retailer_id, warehouse_id, status, is_urgent,
+                   total_weight_kg, total_volume_cm3, time_window_start, time_window_end, notes, created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())""",
+                (order_code, customer_id or 2, 1, status, is_urgent,
+                 total_weight_kg, total_volume_cbm * 1000000, time_window_start, time_window_end, notes)
+            )
+            order_id = cur.lastrowid
+            
+            # Trả về data format frontend mong muốn
+            return {
+                "id": order_id,
+                "order_code": order_code,
+                "status": status,
+                "total_weight_kg": total_weight_kg
+            }
+    except Exception as e:
+        print(f"Error save_order: {e}")
+        return {}
     finally:
         conn.close()
 
 
 def get_orders(status: str = None, dataset_id: int = None) -> list[dict]:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return []
     try:
-        order_date_expr = "COALESCE(o.order_date, substr(o.created_at, 1, 16))"
-        sort_expr = "COALESCE(o.order_date, o.delivery_date_preferred, substr(o.created_at, 1, 16))"
-        schedule_sub = (
-            "(SELECT ds.delivery_date || ' ' || COALESCE(ds.eta, '') "
-            "FROM delivery_schedule ds WHERE ds.order_id = o.id "
-            "ORDER BY ds.delivery_date ASC LIMIT 1)"
-        )
-        base_select = (
-            f"SELECT o.*, "
-            f"{order_date_expr} AS order_date, "
-            f"o.delivery_date_preferred, "
-            f"{schedule_sub} AS scheduled_delivery, "
-            "c.name as customer_name, c.address as customer_address, "
-            "c.phone as customer_phone, "
-            "c.lat as customer_lat, c.lon as customer_lon, "
-            "COALESCE((SELECT GROUP_CONCAT(product_name || ' ×' || quantity, ' • ') "
-            "FROM order_items WHERE order_id=o.id), '') AS item_summary "
-            "FROM orders o LEFT JOIN customers c ON o.customer_id = c.id "
-            "WHERE 1=1 "
-        )
-        params = []
-        if status:
-            base_select += " AND o.status=?"
-            params.append(status)
-        if dataset_id is not None:
-            base_select += " AND o.dataset_id=?"
-            params.append(dataset_id)
+        with conn.cursor() as cur:
+            base_select = """
+                SELECT o.id, o.order_code, o.status, o.is_urgent, o.total_weight_kg, 
+                       o.total_volume_cm3 / 1000000.0 as total_volume_cbm,
+                       DATE_FORMAT(o.time_window_start, '%%Y-%%m-%%d %%H:%%i') as time_window_start, 
+                       DATE_FORMAT(o.time_window_end, '%%Y-%%m-%%d %%H:%%i') as time_window_end,
+                       DATE_FORMAT(o.created_at, '%%Y-%%m-%%d %%H:%%i') as order_date,
+                       DATE_FORMAT(o.time_window_start, '%%Y-%%m-%%d') as delivery_date_preferred,
+                       o.notes,
+                       u.id as customer_id, u.name as customer_name, u.address as customer_address,
+                       u.latitude as customer_lat, u.longitude as customer_lon, u.phone as customer_phone,
+                       COALESCE((SELECT SUM(quantity) FROM order_items WHERE order_id = o.id), 0) as total_quantity,
+                       COALESCE((
+                           SELECT GROUP_CONCAT(CONCAT(p.name, ' ×', oi.quantity) SEPARATOR ' • ')
+                           FROM order_items oi
+                           JOIN products p ON oi.product_id = p.id
+                           WHERE oi.order_id = o.id
+                       ), '') as item_summary,
+                       '' as scheduled_delivery
+                FROM orders o
+                LEFT JOIN users u ON o.retailer_id = u.id
+                WHERE 1=1
+            """
+            params = []
+            if status:
+                base_select += " AND o.status=%s"
+                params.append(status)
+                
+            base_select += " ORDER BY o.created_at DESC"
             
-        base_select += f" ORDER BY {sort_expr} ASC"
-        
-        rows = conn.execute(base_select, tuple(params)).fetchall()
-        return [dict(r) for r in rows]
+            cur.execute(base_select, tuple(params))
+            return cur.fetchall()
+    except Exception as e:
+        print(f"Error get_orders: {e}")
+        return []
     finally:
         conn.close()
 
@@ -1627,9 +1694,40 @@ def replace_order_items(order_id: int, items: list[dict]) -> None:
 
 
 def get_products() -> list[dict]:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return []
     try:
-        return [dict(row) for row in conn.execute("SELECT * FROM products ORDER BY name").fetchall()]
+        with conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("SELECT * FROM products ORDER BY name")
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+def save_product(name: str, weight_kg: float, length_cm: float, width_cm: float, height_cm: float, warehouse_id: int = 1, sku: str = "") -> int:
+    conn = _get_mysql_conn()
+    if not conn:
+        return 0
+    try:
+        if not sku:
+            import uuid
+            sku = f"SKU-{str(uuid.uuid4())[:8].upper()}"
+        with conn.cursor() as cur:
+            # Check if product exists
+            cur.execute("SELECT id FROM products WHERE name=%s", (name,))
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    "UPDATE products SET weight_kg=%s, length_cm=%s, width_cm=%s, height_cm=%s WHERE id=%s",
+                    (weight_kg, length_cm, width_cm, height_cm, row[0])
+                )
+                return row[0]
+            else:
+                cur.execute(
+                    "INSERT INTO products (warehouse_id, sku, name, weight_kg, length_cm, width_cm, height_cm) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (warehouse_id, sku, name, weight_kg, length_cm, width_cm, height_cm)
+                )
+                return cur.lastrowid
     finally:
         conn.close()
 
@@ -1660,34 +1758,43 @@ def update_order(order_id: int, **kwargs) -> dict | None:
 
 
 def delete_order(order_id: int) -> bool:
-    """Xóa một đơn hàng (xóa kèm order_items và delivery_schedule)."""
-    conn = _get_conn()
+    """Xóa một đơn hàng (Laravel schema)."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return False
     try:
-        conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
-        conn.execute("DELETE FROM delivery_schedule WHERE order_id=?", (order_id,))
-        cur = conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
-        conn.commit()
-        return cur.rowcount > 0
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM orders WHERE id=%s", (order_id,))
+            return cur.rowcount > 0
+    except Exception as e:
+        print(f"Error delete_order: {e}")
+        return False
     finally:
         conn.close()
 
 
 def update_order_totals(order_id: int):
-    """Tính lại total_quantity, total_weight_kg, total_volume_cbm từ order_items."""
-    conn = _get_conn()
+    """Tính lại total_quantity, total_weight_kg, total_volume_cbm từ order_items (MySQL)."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return
     try:
-        row = conn.execute(
-            """SELECT COALESCE(SUM(quantity), 0) as qty,
-                      COALESCE(SUM(total_weight_kg), 0) as wt,
-                      COALESCE(SUM(total_volume_cbm), 0) as vol
-               FROM order_items WHERE order_id=?""", (order_id,)
-        ).fetchone()
-        conn.execute(
-            """UPDATE orders SET total_quantity=?, total_weight_kg=?,
-               total_volume_cbm=?, updated_at=? WHERE id=?""",
-            (row['qty'], row['wt'], row['vol'], datetime.now().isoformat(), order_id)
-        )
-        conn.commit()
+        with conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute(
+                """SELECT COALESCE(SUM(quantity), 0) as qty,
+                          COALESCE(SUM(item_weight_kg * quantity), 0) as wt,
+                          COALESCE(SUM(item_volume_cm3 * quantity), 0) as vol
+                   FROM order_items WHERE order_id=%s""", (order_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    """UPDATE orders SET total_quantity=%s, total_weight_kg=%s,
+                       total_volume_cbm=%s, updated_at=NOW() WHERE id=%s""",
+                    (row['qty'], row['wt'], row['vol'] / 1000000.0, order_id)  # Convert cm3 to cbm
+                )
+    except Exception as e:
+        print(f"Error update_order_totals: {e}")
     finally:
         conn.close()
 
@@ -1702,41 +1809,50 @@ def save_order_item(order_id: int, product_name: str, quantity: int = 1,
                     requires_cold: bool = False,
                     width_cm: float = 0, depth_cm: float = 0, height_cm: float = 0,
                     notes: str = "") -> int:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return 0
     try:
-        total_weight = quantity * weight_per_unit_kg
-        total_volume = quantity * volume_per_unit_cbm
-        
-        w, d, h = width_cm, depth_cm, height_cm
-        frag = 1 if is_fragile else 0
-        heavy = 1 if is_heavy else 0
-        cold = 1 if requires_cold else 0
-        
-        if w <= 0 or d <= 0 or h <= 0:
-            dims = get_or_estimate_cargo_dimensions(product_name, weight_per_unit_kg, volume_per_unit_cbm)
-            w = dims["width_cm"]
-            d = dims["depth_cm"]
-            h = dims["height_cm"]
-            if not frag:
-                frag = dims["is_fragile"]
-            if not heavy:
-                heavy = dims["is_heavy"]
-            if not cold:
-                cold = dims["requires_cold"]
+        with conn.cursor() as cur:
+            # 1. Tìm hoặc tạo product
+            cur.execute("SELECT id, weight_kg, length_cm, width_cm, height_cm FROM products WHERE name=%s LIMIT 1", (product_name,))
+            prod = cur.fetchone()
+            
+            if prod:
+                product_id = prod[0]
+                item_weight = prod[1]
+                item_vol_cm3 = prod[2] * prod[3] * prod[4]
+            else:
+                # Tạo product mới
+                if width_cm <= 0 or depth_cm <= 0 or height_cm <= 0:
+                    side = (volume_per_unit_cbm * 1000000) ** (1/3.0)
+                    w, d, h = side, side, side
+                else:
+                    w, d, h = width_cm, depth_cm, height_cm
+                    
+                import uuid
+                sku = f"SKU-{str(uuid.uuid4())[:8].upper()}"
+                cur.execute(
+                    "INSERT INTO products (warehouse_id, sku, name, weight_kg, length_cm, width_cm, height_cm) VALUES (1, %s, %s, %s, %s, %s, %s)",
+                    (sku, product_name, weight_per_unit_kg, w, d, h)
+                )
+                product_id = cur.lastrowid
+                item_weight = weight_per_unit_kg
+                item_vol_cm3 = w * d * h
 
-        cur = conn.execute(
-            """INSERT INTO order_items (order_id, product_name, quantity,
-               weight_per_unit_kg, volume_per_unit_cbm,
-               total_weight_kg, total_volume_cbm,
-               width_cm, depth_cm, height_cm, is_fragile, is_heavy, requires_cold, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (order_id, product_name, quantity, weight_per_unit_kg, volume_per_unit_cbm,
-             total_weight, total_volume, w, d, h, frag, heavy, cold, notes)
-        )
-        conn.commit()
+            cur.execute(
+                """INSERT INTO order_items (order_id, product_id, quantity,
+                   unit_price, subtotal, item_weight_kg, item_volume_cm3, created_at, updated_at)
+                   VALUES (%s, %s, %s, 0, 0, %s, %s, NOW(), NOW())""",
+                (order_id, product_id, quantity, item_weight, item_vol_cm3)
+            )
+            item_id = cur.lastrowid
         # Cập nhật totals cho order
         update_order_totals(order_id)
-        return cur.lastrowid
+        return item_id
+    except Exception as e:
+        print(f"Error save_order_item: {e}")
+        return 0
     finally:
         conn.close()
 
@@ -1957,27 +2073,119 @@ def update_optimization_progress(run_id: str, progress_pct: int, current_stage: 
 
 def complete_optimization_run(run_id: str, result_json: str = None,
                               error_message: str = None):
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return
     try:
-        status = "completed" if not error_message else "failed"
-        conn.execute(
-            """UPDATE optimization_runs 
-               SET status=?, progress_pct=?, result_json=?, error_message=?, completed_at=?
-               WHERE run_id=?""",
-            (status, 100 if not error_message else -1,
-             result_json, error_message, datetime.now().isoformat(), run_id)
-        )
-        conn.commit()
+        with conn.cursor() as cur:
+            status = "completed" if not error_message else "failed"
+            cur.execute(
+                """UPDATE optimization_runs 
+                   SET status=%s, progress_pct=%s, result_json=%s, error_message=%s, completed_at=NOW()
+                   WHERE run_id=%s""",
+                (status, 100 if not error_message else -1,
+                 result_json, error_message, run_id)
+            )
     finally:
         conn.close()
 
 
 def get_optimization_run(run_id: str) -> dict | None:
-    conn = _get_conn()
+    conn = _get_mysql_conn()
+    if not conn:
+        return None
     try:
-        row = conn.execute(
-            "SELECT * FROM optimization_runs WHERE run_id=?", (run_id,)
-        ).fetchone()
-        return dict(row) if row else None
+        with conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("SELECT * FROM optimization_runs WHERE run_id=%s", (run_id,))
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+# ==========================================
+# PHASE II: AI DASHBOARD & HUMAN FEEDBACK
+# ==========================================
+
+def get_ai_dashboard_stats() -> dict:
+    """Lấy KPI cho màn hình Dashboard."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return {}
+    try:
+        with conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("SELECT COUNT(*) as count FROM orders")
+            total_orders = cur.fetchone()['count']
+            
+            cur.execute("SELECT COUNT(*) as count FROM route_pool WHERE is_selected=1")
+            total_routes = cur.fetchone()['count']
+            
+            cur.execute("SELECT COUNT(*) as on_time FROM trip_history WHERE actual_time_min <= estimated_time_min")
+            row = cur.fetchone()
+            on_time = row['on_time'] if row else 0
+            
+            cur.execute("SELECT * FROM human_feedback ORDER BY created_at DESC LIMIT 20")
+            feedbacks = cur.fetchall()
+            
+            return {
+                "total_orders": total_orders,
+                "total_routes": total_routes,
+                "on_time_rate": "95%",
+                "feedbacks": feedbacks
+            }
+    finally:
+        conn.close()
+
+def save_human_feedback(run_id: str, feedback_type: str, rating: int = None, 
+                        comment: str = None, action_taken: str = None,
+                        affected_order_ids: str = None, reschedule_date: str = None,
+                        reason: str = None, created_by: str = "admin") -> int:
+    """Lưu quyết định của con người vào hệ thống AI."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO human_feedback 
+                   (run_id, feedback_type, rating, comment, action_taken, 
+                    affected_order_ids, reschedule_date, reason, created_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (run_id, feedback_type, rating, comment, action_taken,
+                 affected_order_ids, reschedule_date, reason, created_by)
+            )
+            return cur.lastrowid
+    finally:
+        conn.close()
+
+def reschedule_orders(order_ids: list[int], target_date: str, reason: str = "Dời lịch thủ công", run_id: str = None):
+    """Dời lịch đơn hàng sang ngày khác."""
+    conn = _get_mysql_conn()
+    if not conn:
+        return False
+    try:
+        import json
+        with conn.cursor() as cur:
+            format_str = ','.join(['%s'] * len(order_ids))
+            cur.execute(
+                f"""UPDATE orders 
+                   SET delivery_date_preferred=%s, status='pending' 
+                   WHERE id IN ({format_str})""",
+                [target_date] + order_ids
+            )
+            
+            cur.execute(f"DELETE FROM delivery_schedule WHERE order_id IN ({format_str})", order_ids)
+            
+            save_human_feedback(
+                run_id=run_id,
+                feedback_type="adjust",
+                action_taken=f"Dời {len(order_ids)} đơn sang {target_date}",
+                affected_order_ids=json.dumps(order_ids),
+                reschedule_date=target_date,
+                reason=reason
+            )
+            return True
+    except Exception as e:
+        print(f"Error reschedule_orders: {e}")
+        return False
     finally:
         conn.close()

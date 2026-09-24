@@ -172,9 +172,10 @@ def run_full_pipeline(planning_days: int = 5, start_date: str = None, run_id: st
     # Lọc và xóa thẳng các đơn lỗi khỏi DB trước khi lấy limit
     for o in all_orders:
         qty = o.get('total_quantity', 0)
+        weight = float(o.get('total_weight_kg') or 0)
         lat = o.get('customer_lat')
         lon = o.get('customer_lon')
-        if qty <= 0 or not lat or not lon:
+        if (qty <= 0 and weight <= 0) or not lat or not lon:
             try:
                 delete_order(o['id'])
             except Exception:
